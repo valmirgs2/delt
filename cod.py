@@ -69,28 +69,23 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS, SEM LEGENDAS DE EIXO) ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     if imagem_base_pil is None: return None
     
     img_processada = imagem_base_pil.copy()
     draw = ImageDraw.Draw(img_processada)
 
-    # --- COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
-    # URL do gráfico: https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png
-    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
-    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
-    pixel_x_min_temp = 196   # Pixel X para 0°C
-    pixel_x_max_temp = 906   # Pixel X para 50°C
+    temp_min_grafico = 0.0
+    temp_max_grafico = 50.0
+    pixel_x_min_temp = 196
+    pixel_x_max_temp = 906
 
-    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
-    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
-    pixel_y_min_rh = 921     # Pixel Y para 10% UR (base do gráfico)
-    pixel_y_max_rh = 356     # Pixel Y para 100% UR (topo do gráfico)
+    rh_min_grafico = 10.0
+    rh_max_grafico = 100.0
+    pixel_y_min_rh = 921
+    pixel_y_max_rh = 356
 
-    # --- As legendas dos eixos foram removidas desta função ---
-
-    # --- Desenhar Ponto e Ícone (somente se temp_usuario e rh_usuario forem fornecidos) ---
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
         plotar_rh = max(rh_min_grafico, min(rh_usuario, rh_max_grafico))
@@ -103,7 +98,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
-        raio_circulo = 10 # Ajustado para o gráfico original (maior)
+        raio_circulo = 10
         draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
                       (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
                      fill="red", outline="black", width=2)
@@ -111,7 +106,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
             response_icone = requests.get(url_icone, timeout=10)
             response_icone.raise_for_status()
             icone_img = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            tamanho_icone = (35, 35) # Ajustado para o gráfico original
+            tamanho_icone = (35, 35)
             icone_redimensionado = icone_img.resize(tamanho_icone, Image.Resampling.LANCZOS)
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
             pos_y_icone = pixel_y_usuario - tamanho_icone[1] - raio_circulo // 2
@@ -122,15 +117,13 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     return img_processada
 
 # --- LÓGICA DA APLICAÇÃO STREAMLIT ---
-st.set_page_config(page_title="Monitor Delta T Ecowitt", layout="wide")
-st.title("🌦️ Monitor Delta T e Condições Meteorológicas")
+st.set_page_config(page_title="Estação Meteorológica - BASE AGRO", layout="wide") # TÍTULO DA PÁGINA ALTERADO
+st.title("🌦️ Estação Meteorológica - BASE AGRO") # TÍTULO PRINCIPAL ALTERADO
 
 if 'last_update_time' not in st.session_state: st.session_state.last_update_time = datetime.min
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
-# st.session_state.imagem_grafico_com_legendas_eixos não é mais necessário
 
-# --- URL DO GRÁFICO ORIGINAL ---
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
 url_icone_localizacao = "https://static.vecteezy.com/ti/vetor-gratis/p1/8761923-estilo-de-icone-de-localizacao-gratis-vetor.jpg"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
@@ -146,14 +139,12 @@ def carregar_imagem_base(url):
         return None
 
 imagem_base_pil = carregar_imagem_base(url_grafico_base)
-# Não precisamos mais pré-processar a imagem base para adicionar legendas de eixo
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
-    # Simula dados dentro da faixa do gráfico original
     temp = round(random.uniform(0, 50), 1)    
     umid = round(random.uniform(10, 100), 1) 
-    vento_vel = round(random.uniform(0, 30), 1)
+    vento_vel = round(random.uniform(0, 20), 1) # Ajustada simulação de vento para cobrir as faixas
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
     direcoes_vento = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"]
@@ -187,10 +178,9 @@ def atualizar_dados_estacao():
             }
             salvar_dados_no_firestore_simulado(dados_para_salvar)
             st.session_state.dados_atuais = dados_para_salvar
-            if imagem_base_pil: # Desenha diretamente sobre a imagem base
+            if imagem_base_pil:
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, 
-                    temp_ar, umid_rel, url_icone_localizacao
+                    imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
             st.session_state.last_update_time = datetime.now()
             return True
@@ -202,7 +192,7 @@ def atualizar_dados_estacao():
                 "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
             }
             st.session_state.dados_atuais = dados_erro
-            if imagem_base_pil: # Tenta desenhar o ponto mesmo com erro de cálculo
+            if imagem_base_pil:
                  st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
@@ -239,6 +229,7 @@ with col_dados_estacao:
         with col_temp2:
             st.metric(label="Umidade Relativa", value=f"{dados.get('humidity_percent', '-'):.1f} %")
             st.metric(label="Sensação Térmica", value=f"{dados.get('feels_like_c', '-'):.1f} °C" if dados.get('feels_like_c') is not None else "- °C")
+        
         st.markdown("##### 🌱 Delta T")
         condicao_atual_texto = dados.get('condition_text', '-')
         desc_condicao_atual = dados.get('condition_description', 'Aguardando dados...')
@@ -248,24 +239,63 @@ with col_dados_estacao:
         elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#D4EDDA"; cor_texto_condicao = "#155724"
         elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#A76800"
         elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#721C24"
-        delta_t_val = f"{dados.get('delta_t_c', '-'):.2f} °C" if dados.get('delta_t_c') is not None else "-"
+        
+        delta_t_val_num = dados.get('delta_t_c', None)
+        delta_t_display_val = f"{delta_t_val_num:.2f}" if delta_t_val_num is not None else "-"
+        
+        # AUMENTANDO O DESTAQUE DO VALOR DO DELTA T
+        st.markdown(f"""
+        <div style='text-align: center; margin-bottom: 10px;'>
+            <span style='font-size: 1.1em; font-weight: bold;'>Valor Delta T:</span><br>
+            <span style='font-size: 2.2em; font-weight: bold; color: #007bff;'>{delta_t_display_val} °C</span>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown(f"""
         <div style='background-color: {cor_fundo_condicao}; color: {cor_texto_condicao}; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 5px;'>
-            <span style='font-size: 0.9em;'>Delta T: <strong>{delta_t_val}</strong></span><br>
-            <strong style='font-size: 1.1em;'>{condicao_atual_texto}</strong>
+            <strong style='font-size: 1.1em;'>Condição Delta T: {condicao_atual_texto}</strong>
         </div>
         <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_atual}</p>
         """, unsafe_allow_html=True)
         st.markdown("---")
+
         st.markdown("##### 💨 Vento e Pressão")
         col_vento1, col_vento2 = st.columns(2)
+        vento_velocidade_atual = dados.get('wind_speed_kmh', 0) # Pega a velocidade do vento
+        
+        # CLASSIFICAÇÃO DO VENTO
+        condicao_vento_texto = "-"
+        desc_condicao_vento = ""
+        cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
+
+        if vento_velocidade_atual <= 3:
+            condicao_vento_texto = "ARRISCADO"
+            desc_condicao_vento = "Risco de inversão térmica."
+            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800" # Laranja claro
+        elif 3 < vento_velocidade_atual <= 10:
+            condicao_vento_texto = "EXCELENTE"
+            desc_condicao_vento = "Condições ideais de vento."
+            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724" # Verde claro
+        else: # > 10 km/h
+            condicao_vento_texto = "MUITO PERIGOSO"
+            desc_condicao_vento = "Risco de deriva."
+            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C" # Vermelho claro
+            
         with col_vento1:
-            st.metric(label="Vento Médio", value=f"{dados.get('wind_speed_kmh', '-'):.1f} km/h")
+            st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
             st.metric(label="Pressão", value=f"{dados.get('pressure_hpa', '-'):.1f} hPa")
         with col_vento2:
             st.metric(label="Rajadas", value=f"{dados.get('wind_gust_kmh', '-'):.1f} km/h")
             st.metric(label="Direção Vento", value=f"{dados.get('wind_direction', '-')}")
+        
+        st.markdown(f"""
+        <div style='background-color: {cor_fundo_vento}; color: {cor_texto_vento}; padding: 10px; border-radius: 5px; text-align: center; margin-top: 10px; margin-bottom: 5px;'>
+            <strong style='font-size: 1.1em;'>Condição do Vento: {condicao_vento_texto}</strong>
+        </div>
+        <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_vento}</p>
+        """, unsafe_allow_html=True)
         st.markdown("---")
+
         st.markdown("##### ☀️ UV, Luz e Radiação")
         col_rad1, col_rad2 = st.columns(2)
         with col_rad1:
@@ -284,7 +314,6 @@ with col_dados_estacao:
 
 with col_grafico_delta_t:
     st.subheader("Gráfico Delta T")
-    # Exibe a imagem com o ponto e ícone se disponível, senão a imagem base
     imagem_para_exibir = st.session_state.get('imagem_grafico_atual') or imagem_base_pil
                          
     if imagem_para_exibir:
@@ -314,7 +343,7 @@ if historico:
             novos_nomes_colunas = {
                 'timestamp_dt': "Data/Hora", 'temperature_c': "Temp. Ar (°C)",
                 'humidity_percent': "Umid. Rel. (%)", 'delta_t_c': "Delta T (°C)",
-                'condition_text': "Condição", 'wind_speed_kmh': "Vento (km/h)",
+                'condition_text': "Condição Delta T", 'wind_speed_kmh': "Vento (km/h)", # Alterado para Condição Delta T
                 'pressure_hpa': "Pressão (hPa)"}
             df_display = df_display.rename(columns=novos_nomes_colunas)
             if "Data/Hora" in df_display.columns:
