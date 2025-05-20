@@ -1,7 +1,7 @@
 import streamlit as st
 import math
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont # ImageFont ainda pode ser usado para outros textos se necessário
 from io import BytesIO
 from datetime import datetime, timedelta
 import time
@@ -38,7 +38,7 @@ def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
 def calcular_delta_t_e_condicao(t_bs, rh):
     if not (0 <= rh <= 100):
         return None, None, "Erro: Umidade Relativa fora da faixa (0-100%).", None, None, None, None
-    if not (0 <= t_bs <= 50): # Validação para cálculo, alinhada com o gráfico original
+    if not (0 <= t_bs <= 50): 
         return None, None, f"Erro: Temperatura do Ar ({t_bs}°C) fora da faixa de cálculo (0-50°C).", None, None, None, None
     try:
         t_w = calcular_temperatura_bulbo_umido_stull(t_bs, rh)
@@ -69,91 +69,66 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR GRÁFICO COMPLETO (COM COORDENADAS PARA O GRÁFICO ORIGINAL) ---
-def desenhar_grafico_completo(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS, SEM LEGENDAS DE EIXO) ---
+def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     if imagem_base_pil is None: return None
+    
     img_processada = imagem_base_pil.copy()
     draw = ImageDraw.Draw(img_processada)
-    try:
-        # Tentativa de usar uma fonte com tamanho específico
-        titulo_eixo_font = ImageFont.load_default().font_variant(size=30) # Aumentado para o gráfico maior
-    except AttributeError: # Fallback para versões mais antigas do Pillow
-        titulo_eixo_font = ImageFont.load_default()
-    except IOError: # Fallback se load_default() falhar
-        print("Não foi possível carregar a fonte padrão.")
-        titulo_eixo_font = ImageFont.load_default() # Ou defina como None e trate
 
-    # --- COORDENADAS E LIMITES DOS EIXOS PARA O GRÁFICO ORIGINAL ---
-    # URL: https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png
-    temp_min_grafico = 0.0   # Temperatura mínima no eixo X do gráfico
-    temp_max_grafico = 50.0  # Temperatura máxima no eixo X do gráfico
-    pixel_x_min_temp = 196   # Pixel X correspondente a temp_min_grafico (0°C)
-    pixel_x_max_temp = 906   # Pixel X correspondente a temp_max_grafico (50°C)
+    # --- COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
+    # URL do gráfico: https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png
+    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
+    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
+    pixel_x_min_temp = 196   # Pixel X para 0°C
+    pixel_x_max_temp = 906   # Pixel X para 50°C
 
-    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y do gráfico
-    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y do gráfico
-    pixel_y_min_rh = 921     # Pixel Y correspondente a rh_min_grafico (10% UR - base do gráfico)
-    pixel_y_max_rh = 356     # Pixel Y correspondente a rh_max_grafico (100% UR - topo do gráfico)
+    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
+    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
+    pixel_y_min_rh = 921     # Pixel Y para 10% UR (base do gráfico)
+    pixel_y_max_rh = 356     # Pixel Y para 100% UR (topo do gráfico)
 
-    cor_texto_eixo = (0, 0, 0) # Preto
+    # --- As legendas dos eixos foram removidas desta função ---
 
-    # Legenda do Eixo Y (Umidade Relativa) - Rotacionada
-    texto_umidade = "Umidade Relativa (%)"
-    try:
-        umidade_bbox = draw.textbbox((0,0), texto_umidade, font=titulo_eixo_font)
-        umidade_text_width, umidade_text_height = umidade_bbox[2] - umidade_bbox[0], umidade_bbox[3] - umidade_bbox[1]
-    except AttributeError: # Pillow < 9.0.0
-        umidade_text_width, umidade_text_height = len(texto_umidade) * 15, 35 # Estimativa
-        
-    texto_umidade_img = Image.new("RGBA", (umidade_text_width + 20, umidade_text_height + 20), (255,255,255,0)) # Adiciona padding
-    draw_temp_umidade = ImageDraw.Draw(texto_umidade_img)
-    draw_temp_umidade.text((10,10), texto_umidade, font=titulo_eixo_font, fill=cor_texto_eixo)
-    texto_umidade_rotacionado = texto_umidade_img.rotate(90, expand=True)
-    pos_rot_x_umidade = 40 # Ajuste a margem da esquerda para o gráfico maior
-    pos_rot_y_umidade = int(pixel_y_max_rh + (pixel_y_min_rh - pixel_y_max_rh) / 2 - texto_umidade_rotacionado.height / 2)
-    img_processada.paste(texto_umidade_rotacionado, (pos_rot_x_umidade, pos_rot_y_umidade), texto_umidade_rotacionado)
-
-    # Legenda do Eixo X (Temperatura)
-    texto_temperatura = "Temperatura (°C)"
-    try:
-        temp_bbox = draw.textbbox((0,0), texto_temperatura, font=titulo_eixo_font)
-        temp_text_width = temp_bbox[2] - temp_bbox[0]
-    except AttributeError:
-        temp_text_width = len(texto_temperatura) * 15
-    pos_x_temperatura = int(pixel_x_min_temp + (pixel_x_max_temp - pixel_x_min_temp) / 2 - temp_text_width / 2)
-    pos_y_temperatura = pixel_y_min_rh + 30 # Ajuste o espaçamento abaixo do eixo X
-    draw.text((pos_x_temperatura, pos_y_temperatura), texto_temperatura, fill=cor_texto_eixo, font=titulo_eixo_font)
-
+    # --- Desenhar Ponto e Ícone (somente se temp_usuario e rh_usuario forem fornecidos) ---
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
         plotar_rh = max(rh_min_grafico, min(rh_usuario, rh_max_grafico))
+
         range_temp_grafico = temp_max_grafico - temp_min_grafico
         percent_temp = (plotar_temp - temp_min_grafico) / range_temp_grafico if range_temp_grafico != 0 else 0
         pixel_x_usuario = int(pixel_x_min_temp + percent_temp * (pixel_x_max_temp - pixel_x_min_temp))
+
         range_rh_grafico = rh_max_grafico - rh_min_grafico
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
-        raio_circulo = 10 # Aumentado para o gráfico maior
-        draw.ellipse([(pixel_x_usuario-raio_circulo, pixel_y_usuario-raio_circulo), (pixel_x_usuario+raio_circulo, pixel_y_usuario+raio_circulo)], fill="red", outline="black", width=2)
+
+        raio_circulo = 10 # Ajustado para o gráfico original (maior)
+        draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
+                      (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
+                     fill="red", outline="black", width=2)
         try:
             response_icone = requests.get(url_icone, timeout=10)
             response_icone.raise_for_status()
             icone_img = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            tamanho_icone = (35,35) # Aumentado para o gráfico maior
+            tamanho_icone = (35, 35) # Ajustado para o gráfico original
             icone_redimensionado = icone_img.resize(tamanho_icone, Image.Resampling.LANCZOS)
-            pos_x_icone, pos_y_icone = pixel_x_usuario - tamanho_icone[0]//2, pixel_y_usuario - tamanho_icone[1] - raio_circulo//2
+            pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - raio_circulo // 2
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-        except Exception as e_icon: print(f"Erro ao processar ícone: {e_icon}")
+        except Exception as e_icon:
+            print(f"Erro ao processar ícone: {e_icon}")
+            
     return img_processada
 
 # --- LÓGICA DA APLICAÇÃO STREAMLIT ---
 st.set_page_config(page_title="Monitor Delta T Ecowitt", layout="wide")
-st.title("🌦️ Monitor Delta T e Condições Meteorológicas - Base Agro Serviços")
+st.title("🌦️ Monitor Delta T e Condições Meteorológicas")
 
 if 'last_update_time' not in st.session_state: st.session_state.last_update_time = datetime.min
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
-if 'imagem_grafico_com_legendas_eixos' not in st.session_state: st.session_state.imagem_grafico_com_legendas_eixos = None
+# st.session_state.imagem_grafico_com_legendas_eixos não é mais necessário
 
 # --- URL DO GRÁFICO ORIGINAL ---
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
@@ -171,13 +146,13 @@ def carregar_imagem_base(url):
         return None
 
 imagem_base_pil = carregar_imagem_base(url_grafico_base)
-if imagem_base_pil and st.session_state.imagem_grafico_com_legendas_eixos is None:
-    st.session_state.imagem_grafico_com_legendas_eixos = desenhar_grafico_completo(imagem_base_pil, None, None, url_icone_localizacao)
+# Não precisamos mais pré-processar a imagem base para adicionar legendas de eixo
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
-    temp = round(random.uniform(0, 50), 1)
-    umid = round(random.uniform(10, 100), 1)
+    # Simula dados dentro da faixa do gráfico original
+    temp = round(random.uniform(0, 50), 1)    
+    umid = round(random.uniform(10, 100), 1) 
     vento_vel = round(random.uniform(0, 30), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
@@ -212,10 +187,10 @@ def atualizar_dados_estacao():
             }
             salvar_dados_no_firestore_simulado(dados_para_salvar)
             st.session_state.dados_atuais = dados_para_salvar
-            imagem_de_partida = st.session_state.imagem_grafico_com_legendas_eixos or imagem_base_pil
-            if imagem_de_partida:
-                st.session_state.imagem_grafico_atual = desenhar_grafico_completo(
-                    imagem_de_partida, temp_ar, umid_rel, url_icone_localizacao
+            if imagem_base_pil: # Desenha diretamente sobre a imagem base
+                st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
+                    imagem_base_pil, 
+                    temp_ar, umid_rel, url_icone_localizacao
                 )
             st.session_state.last_update_time = datetime.now()
             return True
@@ -227,10 +202,9 @@ def atualizar_dados_estacao():
                 "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
             }
             st.session_state.dados_atuais = dados_erro
-            imagem_de_partida = st.session_state.imagem_grafico_com_legendas_eixos or imagem_base_pil
-            if imagem_de_partida:
-                 st.session_state.imagem_grafico_atual = desenhar_grafico_completo(
-                    imagem_de_partida, temp_ar, umid_rel, url_icone_localizacao
+            if imagem_base_pil: # Tenta desenhar o ponto mesmo com erro de cálculo
+                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
+                    imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
             st.session_state.last_update_time = datetime.now()
             return False
@@ -251,7 +225,7 @@ if st.session_state.last_update_time == datetime.min or \
 st.caption(f"Última atualização dos dados: {st.session_state.last_update_time.strftime('%d/%m/%Y %H:%M:%S') if st.session_state.last_update_time > datetime.min else 'Aguardando primeira atualização...'}")
 st.markdown("---")
 
-col_dados_estacao, col_grafico_delta_t = st.columns([1.2, 1.5]) # Ajustada proporção para gráfico maior
+col_dados_estacao, col_grafico_delta_t = st.columns([1.2, 1.5])
 
 with col_dados_estacao:
     st.subheader("Estação Meteorológica (Dados Atuais)")
@@ -310,9 +284,9 @@ with col_dados_estacao:
 
 with col_grafico_delta_t:
     st.subheader("Gráfico Delta T")
-    imagem_para_exibir = st.session_state.get('imagem_grafico_atual') or \
-                         st.session_state.get('imagem_grafico_com_legendas_eixos') or \
-                         imagem_base_pil
+    # Exibe a imagem com o ponto e ícone se disponível, senão a imagem base
+    imagem_para_exibir = st.session_state.get('imagem_grafico_atual') or imagem_base_pil
+                         
     if imagem_para_exibir:
         caption_text = "Gráfico de referência Delta T"
         if st.session_state.get('dados_atuais') and 'timestamp' in st.session_state.dados_atuais:
@@ -345,7 +319,7 @@ if historico:
             df_display = df_display.rename(columns=novos_nomes_colunas)
             if "Data/Hora" in df_display.columns:
                  df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
-            st.dataframe(df_display, use_column_width=True, hide_index=True)
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
         except Exception as e_pd:
             print(f"Erro ao processar DataFrame do histórico: {e_pd}")
             st.error("Erro ao formatar histórico para exibição.")
@@ -370,5 +344,5 @@ st.markdown("""
 - Este aplicativo tenta buscar dados (simulados) de uma estação Ecowitt a cada 5 minutos.
 - **Para uso real, substitua a função `buscar_dados_ecowitt_simulado()` pela sua integração com a API da sua estação Ecowitt.**
 - O histórico é armazenado (simulado) e exibido. Para persistência real, integre com um banco de dados.
-- As coordenadas de pixel para o gráfico são baseadas na imagem original. Ajuste-as na função `desenhar_grafico_completo` se necessário para maior precisão.
+- As coordenadas de pixel para o gráfico são baseadas nas suas especificações.
 """)
