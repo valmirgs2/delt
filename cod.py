@@ -99,27 +99,23 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
         # Desenhar o ponto preto
-        raio_ponto = 10  # Raio do ponto preto
+        raio_ponto = 10
         cor_ponto = "black"
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
                       (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
-                     fill=cor_ponto, outline=cor_ponto) # Ponto preto sem contorno de outra cor
+                     fill=cor_ponto, outline=cor_ponto)
         
         try:
             response_icone = requests.get(url_icone, timeout=10)
             response_icone.raise_for_status()
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             
-            # O tamanho do ícone pode ser um pouco menor que o ponto para que o ponto seja visível por baixo
-            # ou do mesmo tamanho se a imagem do ícone tiver transparência adequada.
-            tamanho_icone = (35, 35) # Ajuste conforme necessário
+            tamanho_icone = (35, 35) 
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            # Centraliza o ícone sobre o ponto preto
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
             pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
             
-            # Colar o ícone usando sua máscara alfa para transparência
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
         except Exception as e_icon:
             print(f"Erro ao processar ícone: {e_icon}")
