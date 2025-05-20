@@ -1,7 +1,7 @@
 import streamlit as st
 import math
 import requests
-from PIL import Image, ImageDraw, ImageFont # ImageFont ainda pode ser usado para outros textos se necessário
+from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from datetime import datetime, timedelta
 import time
@@ -117,8 +117,8 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     return img_processada
 
 # --- LÓGICA DA APLICAÇÃO STREAMLIT ---
-st.set_page_config(page_title="Estação Meteorológica - BASE AGRO", layout="wide") # TÍTULO DA PÁGINA ALTERADO
-st.title("🌦️ Estação Meteorológica - BASE AGRO") # TÍTULO PRINCIPAL ALTERADO
+st.set_page_config(page_title="Estação Meteorológica - BASE AGRO", layout="wide")
+st.title("🌦️ Estação Meteorológica - BASE AGRO")
 
 if 'last_update_time' not in st.session_state: st.session_state.last_update_time = datetime.min
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
@@ -144,7 +144,7 @@ def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
     temp = round(random.uniform(0, 50), 1)    
     umid = round(random.uniform(10, 100), 1) 
-    vento_vel = round(random.uniform(0, 20), 1) # Ajustada simulação de vento para cobrir as faixas
+    vento_vel = round(random.uniform(0, 20), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
     direcoes_vento = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"]
@@ -180,7 +180,8 @@ def atualizar_dados_estacao():
             st.session_state.dados_atuais = dados_para_salvar
             if imagem_base_pil:
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
+                    imagem_base_pil, 
+                    temp_ar, umid_rel, url_icone_localizacao
                 )
             st.session_state.last_update_time = datetime.now()
             return True
@@ -243,7 +244,6 @@ with col_dados_estacao:
         delta_t_val_num = dados.get('delta_t_c', None)
         delta_t_display_val = f"{delta_t_val_num:.2f}" if delta_t_val_num is not None else "-"
         
-        # AUMENTANDO O DESTAQUE DO VALOR DO DELTA T
         st.markdown(f"""
         <div style='text-align: center; margin-bottom: 10px;'>
             <span style='font-size: 1.1em; font-weight: bold;'>Valor Delta T:</span><br>
@@ -261,9 +261,8 @@ with col_dados_estacao:
 
         st.markdown("##### 💨 Vento e Pressão")
         col_vento1, col_vento2 = st.columns(2)
-        vento_velocidade_atual = dados.get('wind_speed_kmh', 0) # Pega a velocidade do vento
+        vento_velocidade_atual = dados.get('wind_speed_kmh', 0)
         
-        # CLASSIFICAÇÃO DO VENTO
         condicao_vento_texto = "-"
         desc_condicao_vento = ""
         cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
@@ -271,15 +270,15 @@ with col_dados_estacao:
         if vento_velocidade_atual <= 3:
             condicao_vento_texto = "ARRISCADO"
             desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800" # Laranja claro
+            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800"
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724" # Verde claro
-        else: # > 10 km/h
+            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724"
+        else: 
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
-            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C" # Vermelho claro
+            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C"
             
         with col_vento1:
             st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
@@ -323,7 +322,8 @@ with col_grafico_delta_t:
                 ts_obj = datetime.fromisoformat(st.session_state.dados_atuais['timestamp'])
                 caption_text = f"Ponto indicativo para dados de: {ts_obj.strftime('%d/%m/%Y %H:%M:%S')}"
             except: caption_text = f"Ponto indicativo para dados de: {st.session_state.dados_atuais['timestamp']}"
-        st.image(imagem_para_exibir, caption=caption_text, use_column_width=True)
+        # SUBSTITUÍDO use_column_width por use_container_width
+        st.image(imagem_para_exibir, caption=caption_text, use_container_width=True)
     else:
         st.warning("Imagem base do gráfico não disponível.")
 
@@ -343,11 +343,12 @@ if historico:
             novos_nomes_colunas = {
                 'timestamp_dt': "Data/Hora", 'temperature_c': "Temp. Ar (°C)",
                 'humidity_percent': "Umid. Rel. (%)", 'delta_t_c': "Delta T (°C)",
-                'condition_text': "Condição Delta T", 'wind_speed_kmh': "Vento (km/h)", # Alterado para Condição Delta T
+                'condition_text': "Condição Delta T", 'wind_speed_kmh': "Vento (km/h)",
                 'pressure_hpa': "Pressão (hPa)"}
             df_display = df_display.rename(columns=novos_nomes_colunas)
             if "Data/Hora" in df_display.columns:
                  df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
+            # SUBSTITUÍDO use_column_width por use_container_width
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         except Exception as e_pd:
             print(f"Erro ao processar DataFrame do histórico: {e_pd}")
@@ -359,7 +360,7 @@ if historico:
             colunas_numericas_chart = ['temperature_c', 'humidity_percent', 'delta_t_c', 'wind_speed_kmh']
             colunas_presentes_chart = [col for col in colunas_numericas_chart if col in df_chart.columns]
             if colunas_presentes_chart:
-                 st.line_chart(df_chart[colunas_presentes_chart])
+                 st.line_chart(df_chart[colunas_presentes_chart]) # Não usa use_container_width aqui diretamente
             else: st.warning("Sem dados suficientes para gráfico de tendências.")
         except Exception as e_chart:
             print(f"Erro ao gerar gráfico de linha do histórico: {e_chart}")
