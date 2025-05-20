@@ -98,21 +98,28 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
-        raio_circulo = 10
-        draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
-                      (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
-                     fill="red", outline="black", width=2)
+        # Removido o desenho do ponto vermelho
+        # raio_circulo = 10 
+        # draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
+        #               (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
+        #              fill="red", outline="black", width=2)
         try:
             response_icone = requests.get(url_icone, timeout=10)
             response_icone.raise_for_status()
             icone_img = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            tamanho_icone = (35, 35)
+            
+            # Ajuste o tamanho do ícone conforme necessário para a nova imagem
+            tamanho_icone = (40, 40) # Exemplo de tamanho, pode precisar de ajuste
             icone_redimensionado = icone_img.resize(tamanho_icone, Image.Resampling.LANCZOS)
+            
+            # Centraliza o ícone no ponto do usuário
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - raio_circulo // 2
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
+            
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
         except Exception as e_icon:
             print(f"Erro ao processar ícone: {e_icon}")
+            st.warning(f"Não foi possível carregar o ícone de marcação: {e_icon}")
             
     return img_processada
 
@@ -125,7 +132,8 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-url_icone_localizacao = "https://static.vecteezy.com/ti/vetor-gratis/p1/8761923-estilo-de-icone-de-localizacao-gratis-vetor.jpg"
+# --- URL DO NOVO ÍCONE ---
+url_icone_localizacao = "https://baseagro.com.br/wp-content/webp-express/webp-images/uploads/2024/09/cropped-cropped-IMG_0797.jpg.webp"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -150,7 +158,6 @@ def buscar_dados_ecowitt_simulado():
     direcoes_vento = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"]
     vento_dir = random.choice(direcoes_vento)
     altitude = 314
-    # UV, Luminosidade e Radiação ainda são simulados, mas não serão exibidos na UI principal
     uv_index = random.randint(0, 11)
     luminosidade = random.randint(1000, 80000)
     radiacao_solar = random.randint(50, 900)
@@ -175,7 +182,7 @@ def atualizar_dados_estacao():
                 "condition_description": desc_condicao,
                 "dew_point_c": round(ponto_orvalho,1) if ponto_orvalho is not None else None,
                 "feels_like_c": round(sensacao_termica,1) if sensacao_termica is not None else None,
-                **dados_ecowitt # Inclui todos os dados da Ecowitt, mesmo os não exibidos
+                **dados_ecowitt
             }
             salvar_dados_no_firestore_simulado(dados_para_salvar)
             st.session_state.dados_atuais = dados_para_salvar
@@ -279,7 +286,7 @@ with col_dados_estacao:
         else: 
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
-            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C"
+            cor_fundo_vento = "#FFD2D2"; cor_texto_vento = "#D8000C"
             
         with col_vento1:
             st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
@@ -294,9 +301,7 @@ with col_dados_estacao:
         </div>
         <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_vento}</p>
         """, unsafe_allow_html=True)
-        st.markdown("---") # Adicionado um separador após o bloco de vento
-
-        # A SEÇÃO DE UV, LUZ E RADIAÇÃO FOI REMOVIDA DAQUI
+        st.markdown("---")
 
     else:
         st.info("Aguardando dados da estação para exibir as condições atuais...")
