@@ -69,11 +69,9 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM DEPURAÇÃO ADICIONAL) ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
-    if imagem_base_pil is None: 
-        print("DEBUG ÍCONE: Imagem base é None, não é possível desenhar.")
-        return None
+    if imagem_base_pil is None: return None
     
     img_processada = imagem_base_pil.copy()
     draw = ImageDraw.Draw(img_processada)
@@ -100,48 +98,32 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
-        # O ponto vermelho foi removido em uma solicitação anterior.
-        # raio_circulo = 10 
-        # draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
-        #               (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
-        #              fill="red", outline="black", width=2)
+        # Desenhar o ponto preto
+        raio_ponto = 10  # Raio do ponto preto
+        cor_ponto = "black"
+        draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
+                      (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
+                     fill=cor_ponto, outline=cor_ponto) # Ponto preto sem contorno de outra cor
+        
         try:
-            print(f"DEBUG ÍCONE: Tentando descarregar ícone de: {url_icone}")
             response_icone = requests.get(url_icone, timeout=10)
-            print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
-            response_icone.raise_for_status() # Levanta exceção para códigos de erro HTTP
+            response_icone.raise_for_status()
+            icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             
-            content_type_icone = response_icone.headers.get('content-type')
-            print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
-
-            if not content_type_icone or not content_type_icone.startswith('image/'):
-                st.warning(f"O conteúdo descarregado do URL do ícone não parece ser uma imagem (Content-Type: {content_type_icone}). Verifique o URL.")
-                print(f"DEBUG ÍCONE: Content-Type não é de imagem: {content_type_icone}")
-                return img_processada # Retorna a imagem sem o ícone se não for uma imagem
-
-            icone_img = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            print("DEBUG ÍCONE: Ícone aberto com Pillow.")
+            # O tamanho do ícone pode ser um pouco menor que o ponto para que o ponto seja visível por baixo
+            # ou do mesmo tamanho se a imagem do ícone tiver transparência adequada.
+            tamanho_icone = (35, 35) # Ajuste conforme necessário
+            icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            tamanho_icone = (40, 40) 
-            icone_redimensionado = icone_img.resize(tamanho_icone, Image.Resampling.LANCZOS)
-            print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
-            
+            # Centraliza o ícone sobre o ponto preto
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
             pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
-            print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
             
+            # Colar o ícone usando sua máscara alfa para transparência
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-            print("DEBUG ÍCONE: Ícone colado na imagem.")
-
-        except requests.exceptions.RequestException as e_req:
-            print(f"DEBUG ÍCONE: Erro de rede ao descarregar ícone: {e_req}")
-            st.warning(f"Não foi possível descarregar o ícone de marcação (erro de rede): {e_req}")
-        except IOError as e_io: # Especificamente para erros do Pillow ao abrir a imagem
-            print(f"DEBUG ÍCONE: Erro do Pillow ao abrir/processar o ícone (IOError): {e_io}")
-            st.warning(f"O ficheiro do ícone pode estar corrompido ou não é um formato de imagem suportado: {e_io}")
         except Exception as e_icon:
-            print(f"DEBUG ÍCONE: Erro geral ao processar ícone: {e_icon}")
-            st.warning(f"Não foi possível carregar ou processar o ícone de marcação: {e_icon}")
+            print(f"Erro ao processar ícone: {e_icon}")
+            st.warning(f"Não foi possível carregar o ícone de marcação: {e_icon}")
             
     return img_processada
 
@@ -154,7 +136,8 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-url_icone_localizacao = "https://baseagro.com.br/wp-content/uploads/2024/09/cropped-cropped-IMG_0797-300x300.jpg"
+# --- URL DO NOVO ÍCONE ATUALIZADA ---
+url_icone_localizacao = "https://cdn-icons-png.flaticon.com/512/8884/8884271.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -215,14 +198,14 @@ def atualizar_dados_estacao():
             st.session_state.last_update_time = datetime.now()
             return True
         else:
-            st.error(f"Erro no cálculo Delta T: {condicao}") # condicao aqui terá a mensagem de erro
+            st.error(f"Erro no cálculo Delta T: {condicao}")
             dados_erro = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
                 "humidity_percent": umid_rel, "wet_bulb_c": None, "delta_t_c": None,
                 "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
             }
             st.session_state.dados_atuais = dados_erro
-            if imagem_base_pil: # Tenta desenhar o ponto mesmo com erro de cálculo
+            if imagem_base_pil:
                  st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
