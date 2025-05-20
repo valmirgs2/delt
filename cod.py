@@ -98,7 +98,8 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
-        # Removido o desenho do ponto vermelho
+        # O ponto vermelho foi removido em uma solicitação anterior.
+        # Se quiser de volta, descomente as linhas abaixo:
         # raio_circulo = 10 
         # draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
         #               (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
@@ -108,8 +109,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
             response_icone.raise_for_status()
             icone_img = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             
-            # Ajuste o tamanho do ícone conforme necessário para a nova imagem
-            tamanho_icone = (40, 40) # Exemplo de tamanho, pode precisar de ajuste
+            tamanho_icone = (40, 40) # Ajuste o tamanho do ícone conforme necessário
             icone_redimensionado = icone_img.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
             # Centraliza o ícone no ponto do usuário
@@ -132,8 +132,8 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-# --- URL DO NOVO ÍCONE ---
-url_icone_localizacao = "https://baseagro.com.br/wp-content/webp-express/webp-images/uploads/2024/09/cropped-cropped-IMG_0797.jpg.webp"
+# --- URL DO NOVO ÍCONE ATUALIZADA ---
+url_icone_localizacao = "https://baseagro.com.br/wp-content/uploads/2024/09/cropped-cropped-IMG_0797-300x300.jpg"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
