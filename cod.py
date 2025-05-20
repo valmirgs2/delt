@@ -150,6 +150,7 @@ def buscar_dados_ecowitt_simulado():
     direcoes_vento = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"]
     vento_dir = random.choice(direcoes_vento)
     altitude = 314
+    # UV, Luminosidade e Radiação ainda são simulados, mas não serão exibidos na UI principal
     uv_index = random.randint(0, 11)
     luminosidade = random.randint(1000, 80000)
     radiacao_solar = random.randint(50, 900)
@@ -174,7 +175,7 @@ def atualizar_dados_estacao():
                 "condition_description": desc_condicao,
                 "dew_point_c": round(ponto_orvalho,1) if ponto_orvalho is not None else None,
                 "feels_like_c": round(sensacao_termica,1) if sensacao_termica is not None else None,
-                **dados_ecowitt
+                **dados_ecowitt # Inclui todos os dados da Ecowitt, mesmo os não exibidos
             }
             salvar_dados_no_firestore_simulado(dados_para_salvar)
             st.session_state.dados_atuais = dados_para_salvar
@@ -293,15 +294,10 @@ with col_dados_estacao:
         </div>
         <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_vento}</p>
         """, unsafe_allow_html=True)
-        st.markdown("---")
+        st.markdown("---") # Adicionado um separador após o bloco de vento
 
-        st.markdown("##### ☀️ UV, Luz e Radiação")
-        col_rad1, col_rad2 = st.columns(2)
-        with col_rad1:
-            st.metric(label="Índice UV", value=f"{dados.get('uv_index', '-')}")
-            st.metric(label="Radiação Solar", value=f"{dados.get('solar_radiation_wm2', '-')} W/m²")
-        with col_rad2:
-            st.metric(label="Luminosidade", value=f"{dados.get('luminosity_lux', '-')} lux")
+        # A SEÇÃO DE UV, LUZ E RADIAÇÃO FOI REMOVIDA DAQUI
+
     else:
         st.info("Aguardando dados da estação para exibir as condições atuais...")
     if st.button("Forçar Atualização Manual Agora", key="btn_atualizar_col1"):
@@ -322,7 +318,6 @@ with col_grafico_delta_t:
                 ts_obj = datetime.fromisoformat(st.session_state.dados_atuais['timestamp'])
                 caption_text = f"Ponto indicativo para dados de: {ts_obj.strftime('%d/%m/%Y %H:%M:%S')}"
             except: caption_text = f"Ponto indicativo para dados de: {st.session_state.dados_atuais['timestamp']}"
-        # SUBSTITUÍDO use_column_width por use_container_width
         st.image(imagem_para_exibir, caption=caption_text, use_container_width=True)
     else:
         st.warning("Imagem base do gráfico não disponível.")
@@ -348,7 +343,6 @@ if historico:
             df_display = df_display.rename(columns=novos_nomes_colunas)
             if "Data/Hora" in df_display.columns:
                  df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
-            # SUBSTITUÍDO use_column_width por use_container_width
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         except Exception as e_pd:
             print(f"Erro ao processar DataFrame do histórico: {e_pd}")
@@ -360,7 +354,7 @@ if historico:
             colunas_numericas_chart = ['temperature_c', 'humidity_percent', 'delta_t_c', 'wind_speed_kmh']
             colunas_presentes_chart = [col for col in colunas_numericas_chart if col in df_chart.columns]
             if colunas_presentes_chart:
-                 st.line_chart(df_chart[colunas_presentes_chart]) # Não usa use_container_width aqui diretamente
+                 st.line_chart(df_chart[colunas_presentes_chart])
             else: st.warning("Sem dados suficientes para gráfico de tendências.")
         except Exception as e_chart:
             print(f"Erro ao gerar gráfico de linha do histórico: {e_chart}")
