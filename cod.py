@@ -99,11 +99,11 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
         # Desenhar o ponto vermelho
-        raio_ponto = 8  # Raio do ponto vermelho (pode ajustar)
+        raio_ponto = 8
         cor_ponto = "red"
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
                       (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
-                     fill=cor_ponto, outline="black", width=1) # Contorno preto fino para o ponto
+                     fill=cor_ponto, outline="black", width=1)
         
         try:
             response_icone = requests.get(url_icone, timeout=10)
@@ -113,13 +113,10 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
             tamanho_icone = (35, 35) 
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            # Posiciona o ícone para que sua base fique um pouco acima do centro do ponto vermelho
-            # A ideia é que o "pino" do ícone de localização aponte para o ponto vermelho.
-            # Ajuste o 'offset_vertical_icone' conforme necessário.
-            offset_vertical_icone = tamanho_icone[1] // 2 + raio_ponto + 2 # Metade da altura do ícone + raio do ponto + pequeno espaço
-
+            # Posiciona o ícone 15 pixels acima do centro do ponto
+            # pos_y_icone é a coordenada Y do canto superior esquerdo do ícone
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - offset_vertical_icone
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - 15 # (centro do ponto Y) - (altura do ícone) - (15 pixels de espaço)
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
         except Exception as e_icon:
@@ -137,7 +134,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-url_icone_localizacao = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiu0y8HnDMSvv4vgtKKD4TF86QzQpTZhD_eF3NihFGJs5e_6Y7hcmaF6OQwdvMysg4YEA02HEis39Dxcfbgo6zI1PxUxTvB08O77uMMIelMMA6qjBwc0M-m5Wf-Pdy6c1XOvzD2WnJTFTEC/s1600/bola-de-fetebol-em-png-queroimagem-cei%C3%A7a-crispim.png" # Mantido o último ícone solicitado
+url_icone_localizacao = "https://clipground.com/images/address-clipart-logo-9.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
