@@ -133,7 +133,7 @@ if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafi
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
 # --- URL DO NOVO ÍCONE ATUALIZADA ---
-url_icone_localizacao = "https://clipground.com/images/address-clipart-logo-9.png"
+url_icone_localizacao = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiu0y8HnDMSvv4vgtKKD4TF86QzQpTZhD_eF3NihFGJs5e_6Y7hcmaF6OQwdvMysg4YEA02HEis39Dxcfbgo6zI1PxUxTvB08O77uMMIelMMA6qjBwc0M-m5Wf-Pdy6c1XOvzD2WnJTFTEC/s1600/bola-de-fetebol-em-png-queroimagem-cei%C3%A7a-crispim.pnG"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
