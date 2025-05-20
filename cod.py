@@ -137,7 +137,7 @@ if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafi
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
 # --- URL DO NOVO ÍCONE ATUALIZADA ---
-url_icone_localizacao = "https://cdn-icons-png.flaticon.com/512/8884/8884271.png"
+url_icone_localizacao = "https://clipground.com/images/address-clipart-logo-9.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
