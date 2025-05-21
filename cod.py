@@ -69,7 +69,7 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM NOVAS COORDENADAS ESTIMADAS) ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS) ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
     if imagem_base_pil is None: 
@@ -80,16 +80,16 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    # --- NOVAS COORDENADAS E LIMITES DOS EIXOS ESTIMADOS PARA https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg ---
+    # --- COORDENADAS E LIMITES DOS EIXOS ATUALIZADOS CONFORME ESPECIFICADO PELO USUÁRIO ---
     temp_min_grafico = 0.0   # Temperatura mínima no eixo X
     temp_max_grafico = 50.0  # Temperatura máxima no eixo X
-    pixel_x_min_temp = 75    # Estimativa para 0°C no novo gráfico
-    pixel_x_max_temp = 700   # Estimativa para 50°C no novo gráfico
+    pixel_x_min_temp = 443   # Pixel X para 0°C
+    pixel_x_max_temp = 1965  # Pixel X para 50°C
 
     rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
     rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
-    pixel_y_min_rh = 560     # Estimativa para 10% UR (base do gráfico)
-    pixel_y_max_rh = 70      # Estimativa para 100% UR (topo do gráfico)
+    pixel_y_min_rh = 1450    # Pixel Y para 10% UR (base do gráfico)
+    pixel_y_max_rh = 242     # Pixel Y para 100% UR (topo do gráfico)
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -346,7 +346,7 @@ with col_dados_estacao:
         if vento_velocidade_atual <= 3:
             condicao_vento_texto = "ARRISCADO"
             desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800"
+            cor_fundo_vento = "#FFE9C5"; cor_texto_condicao = "#A76800"
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
