@@ -173,7 +173,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
+url_icone_localizacao = "https://w7.pngwing.com/pngs/636/369/png-transparent-target-aim-darts-dart-board-bull-s-eye-dart-accuracy-precision-center.png" 
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
