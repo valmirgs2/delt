@@ -78,17 +78,17 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    # !!! IMPORTANTE: ESTES VALORES DE PIXEL SÃO DO GRÁFICO ANTERIOR !!!
-    # !!! VOCÊ PRECISARÁ ATUALIZÁ-LOS PARA O NOVO GRÁFICO !!!
-    temp_min_grafico = 0.0   # Ajuste conforme o novo gráfico
-    temp_max_grafico = 50.0  # Ajuste conforme o novo gráfico
-    pixel_x_min_temp = 196   # Coordenada X para temp_min_grafico no NOVO gráfico
-    pixel_x_max_temp = 906   # Coordenada X para temp_max_grafico no NOVO gráfico
+    # --- NOVAS COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
+    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
+    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
+    pixel_x_min_temp = 440   # Pixel X para 0°C
+    pixel_x_max_temp = 1964  # Pixel X para 50°C
 
-    rh_min_grafico = 10.0    # Ajuste conforme o novo gráfico
-    rh_max_grafico = 100.0   # Ajuste conforme o novo gráfico
-    pixel_y_min_rh = 921     # Coordenada Y para rh_min_grafico no NOVO gráfico (base)
-    pixel_y_max_rh = 356     # Coordenada Y para rh_max_grafico no NOVO gráfico (topo)
+    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
+    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
+    pixel_y_min_rh = 1448    # Pixel Y para 10% UR (base do gráfico)
+    pixel_y_max_rh = 240     # Pixel Y para 100% UR (topo do gráfico)
+
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -102,6 +102,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
 
+        # Desenhar o ponto vermelho
         raio_ponto = 8 
         cor_ponto = "red"
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
@@ -157,8 +158,7 @@ if 'last_update_time' not in st.session_state: st.session_state.last_update_time
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
-# --- URL DO NOVO GRÁFICO ATUALIZADA ---
-url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
+url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg" # Mantido o último gráfico solicitado
 url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
@@ -176,9 +176,8 @@ imagem_base_pil = carregar_imagem_base(url_grafico_base)
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
-    # Ajustar simulação para os prováveis eixos do novo gráfico (0-50C, 0-100% UR)
     temp = round(random.uniform(0, 50), 1)    
-    umid = round(random.uniform(0, 100), 1) # Ajustado para 0-100%
+    umid = round(random.uniform(10, 100), 1) 
     vento_vel = round(random.uniform(0, 20), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
