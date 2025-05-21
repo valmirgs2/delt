@@ -69,8 +69,8 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS) ---
-def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
+# --- FUNÇÃO PARA DESENHAR PONTO NO GRÁFICO ---
+def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone=None): # url_icone agora é opcional
     print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
     if imagem_base_pil is None: 
         print("DEBUG GRÁFICO: Imagem base é None, retornando None.")
@@ -80,7 +80,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    # --- COORDENADAS E LIMITES DOS EIXOS ATUALIZADOS CONFORME ESPECIFICADO PELO USUÁRIO ---
+    # Coordenadas e limites dos eixos conforme especificado pelo usuário
     temp_min_grafico = 0.0   # Temperatura mínima no eixo X
     temp_max_grafico = 50.0  # Temperatura máxima no eixo X
     pixel_x_min_temp = 443   # Pixel X para 0°C
@@ -114,55 +114,56 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
                      fill=cor_ponto, outline="black", width=1) 
         print("DEBUG GRÁFICO: Ponto vermelho desenhado.")
         
-        try:
-            print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
-            response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
-            print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
-            response_icone.raise_for_status() 
+        # REMOVIDA A LÓGICA DE DESENHAR O ÍCONE
+        # try:
+        #     print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
+        #     response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
+        #     print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
+        #     response_icone.raise_for_status() 
             
-            content_type_icone = response_icone.headers.get('content-type', '').lower()
-            print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
+        #     content_type_icone = response_icone.headers.get('content-type', '').lower()
+        #     print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
 
-            if not (content_type_icone.startswith('image/png') or \
-                    content_type_icone.startswith('image/jpeg') or \
-                    content_type_icone.startswith('image/gif') or \
-                    content_type_icone.startswith('image/webp')): 
-                st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
-                print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
-                return img_processada 
+        #     if not (content_type_icone.startswith('image/png') or \
+        #             content_type_icone.startswith('image/jpeg') or \
+        #             content_type_icone.startswith('image/gif') or \
+        #             content_type_icone.startswith('image/webp')): 
+        #         st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
+        #         print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
+        #         return img_processada 
 
-            icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            print("DEBUG ÍCONE: Ícone aberto com Pillow.")
+        #     icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
+        #     print("DEBUG ÍCONE: Ícone aberto com Pillow.")
             
-            tamanho_icone_base = 35 
-            novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
-            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
+        #     tamanho_icone_base = 35 
+        #     novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
+        #     tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
             
-            icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
-            print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
+        #     icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
+        #     print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
             
-            # Centralizar o ícone sobre o ponto
-            pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
-            print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
+        #     # Centralizar o ícone sobre o ponto
+        #     pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
+        #     pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
+        #     print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
             
-            img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-            print("DEBUG ÍCONE: Ícone colado na imagem.")
+        #     img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
+        #     print("DEBUG ÍCONE: Ícone colado na imagem.")
 
-        except requests.exceptions.HTTPError as e_http: 
-            print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
-            st.warning(f"Não foi possível descarregar o ícone de marcação (Erro HTTP {response_icone.status_code}). Verifique se o URL está correto e acessível: {url_icone}")
-        except requests.exceptions.RequestException as e_req: 
-            print(f"DEBUG ÍCONE: Erro de rede ao descarregar ícone: {e_req}")
-            st.warning(f"Não foi possível descarregar o ícone de marcação (erro de rede). Verifique sua conexão e o URL do ícone.")
-        except IOError as e_io: 
-            print(f"DEBUG ÍCONE: Erro do Pillow ao abrir/processar o ícone (IOError): {e_io}")
-            st.warning(f"O ficheiro do ícone pode estar corrompido ou não é um formato de imagem suportado. Verifique o URL do ícone.")
-        except Exception as e_icon: 
-            print(f"DEBUG ÍCONE: Erro geral e inesperado ao processar ícone: {e_icon}")
-            st.warning(f"Ocorreu um erro inesperado ao carregar ou processar o ícone de marcação.")
+        # except requests.exceptions.HTTPError as e_http: 
+        #     print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
+        #     st.warning(f"Não foi possível descarregar o ícone de marcação (Erro HTTP {response_icone.status_code}). Verifique se o URL está correto e acessível: {url_icone}")
+        # except requests.exceptions.RequestException as e_req: 
+        #     print(f"DEBUG ÍCONE: Erro de rede ao descarregar ícone: {e_req}")
+        #     st.warning(f"Não foi possível descarregar o ícone de marcação (erro de rede). Verifique sua conexão e o URL do ícone.")
+        # except IOError as e_io: 
+        #     print(f"DEBUG ÍCONE: Erro do Pillow ao abrir/processar o ícone (IOError): {e_io}")
+        #     st.warning(f"O ficheiro do ícone pode estar corrompido ou não é um formato de imagem suportado. Verifique o URL do ícone.")
+        # except Exception as e_icon: 
+        #     print(f"DEBUG ÍCONE: Erro geral e inesperado ao processar ícone: {e_icon}")
+        #     st.warning(f"Ocorreu um erro inesperado ao carregar ou processar o ícone de marcação.")
     else:
-        print("DEBUG GRÁFICO: temp_usuario ou rh_usuario é None, nenhum ponto/ícone será desenhado.")
+        print("DEBUG GRÁFICO: temp_usuario ou rh_usuario é None, nenhum ponto será desenhado.")
             
     print("DEBUG GRÁFICO: Retornando img_processada de desenhar_grafico_com_ponto.")
     return img_processada
@@ -176,7 +177,8 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
+# url_icone_localizacao não é mais usado diretamente para desenhar, mas pode ser mantido se houver outra utilização
+# url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -243,7 +245,7 @@ def atualizar_dados_estacao():
                 print("DEBUG APP: Imagem base PIL existe, chamando desenhar_grafico_com_ponto.")
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, 
-                    temp_ar, umid_rel, url_icone_localizacao
+                    temp_ar, umid_rel # url_icone não é mais necessária aqui se não for desenhar
                 )
                 if st.session_state.imagem_grafico_atual:
                     print("DEBUG APP: imagem_grafico_atual foi atualizada.")
@@ -263,9 +265,9 @@ def atualizar_dados_estacao():
             }
             st.session_state.dados_atuais = dados_erro
             if imagem_base_pil: 
-                 print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto/ícone de qualquer maneira.")
+                 print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto de qualquer maneira.")
                  st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
+                    imagem_base_pil, temp_ar, umid_rel
                 )
             st.session_state.last_update_time = datetime.now() 
             return False 
@@ -346,7 +348,7 @@ with col_dados_estacao:
         if vento_velocidade_atual <= 3:
             condicao_vento_texto = "ARRISCADO"
             desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_condicao = "#A76800"
+            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800"
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
