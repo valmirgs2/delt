@@ -134,7 +134,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-url_icone_localizacao = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiu0y8HnDMSvv4vgtKKD4TF86QzQpTZhD_eF3NihFGJs5e_6Y7hcmaF6OQwdvMysg4YEA02HEis39Dxcfbgo6zI1PxUxTvB08O77uMMIelMMA6qjBwc0M-m5Wf-Pdy6c1XOvzD2WnJTFTEC/s1600/bola-de-fetebol-em-png-queroimagem-cei%C3%A7a-crispim.png"
+url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
