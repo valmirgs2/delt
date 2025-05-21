@@ -171,7 +171,7 @@ if 'last_update_time' not in st.session_state: st.session_state.last_update_time
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
-url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
+url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
 url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" # URL do ícone fornecida pelo utilizador
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
