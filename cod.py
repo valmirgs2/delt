@@ -78,15 +78,17 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    temp_min_grafico = 0.0
-    temp_max_grafico = 50.0
-    pixel_x_min_temp = 196
-    pixel_x_max_temp = 906
+    # !!! IMPORTANTE: ESTES VALORES DE PIXEL SÃO DO GRÁFICO ANTERIOR !!!
+    # !!! VOCÊ PRECISARÁ ATUALIZÁ-LOS PARA O NOVO GRÁFICO !!!
+    temp_min_grafico = 0.0   # Ajuste conforme o novo gráfico
+    temp_max_grafico = 50.0  # Ajuste conforme o novo gráfico
+    pixel_x_min_temp = 196   # Coordenada X para temp_min_grafico no NOVO gráfico
+    pixel_x_max_temp = 906   # Coordenada X para temp_max_grafico no NOVO gráfico
 
-    rh_min_grafico = 10.0
-    rh_max_grafico = 100.0
-    pixel_y_min_rh = 921 
-    pixel_y_max_rh = 356 
+    rh_min_grafico = 10.0    # Ajuste conforme o novo gráfico
+    rh_max_grafico = 100.0   # Ajuste conforme o novo gráfico
+    pixel_y_min_rh = 921     # Coordenada Y para rh_min_grafico no NOVO gráfico (base)
+    pixel_y_max_rh = 356     # Coordenada Y para rh_max_grafico no NOVO gráfico (topo)
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -100,14 +102,11 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
 
-        # Desenhar o ponto vermelho
         raio_ponto = 8 
         cor_ponto = "red"
-        ponto_bbox = [
-            (pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
-            (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)
-        ]
-        draw.ellipse(ponto_bbox, fill=cor_ponto, outline="black", width=1) 
+        draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
+                      (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
+                     fill=cor_ponto, outline="black", width=1) 
         
         try:
             response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
@@ -124,23 +123,14 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
 
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             
-            # AUMENTAR O TAMANHO DO ÍCONE EM 25%
             tamanho_icone_base = 35 
-            novo_tamanho_icone = int(tamanho_icone_base * 1.25) # 35 * 1.25 = 43.75, arredondado para 44 ou 43
+            novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
             tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
             
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            # REMOVIDA A LÓGICA DA SOMBRA
-            # sombra_layer = Image.new('RGBA', img_processada.size, (0,0,0,0))
-            # draw_sombra = ImageDraw.Draw(sombra_layer)
-            # draw_sombra.ellipse(sombra_bbox, fill=cor_sombra)
-            # img_processada = Image.alpha_composite(img_processada.convert('RGBA'), sombra_layer)
-            # draw = ImageDraw.Draw(img_processada) 
-
-            # POSICIONAR O ÍCONE CENTRALIZADO SOBRE O PONTO
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
+            pos_y_icone = (pixel_y_usuario - raio_ponto) - 15 - tamanho_icone[1]
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
 
@@ -167,8 +157,9 @@ if 'last_update_time' not in st.session_state: st.session_state.last_update_time
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
-url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png"
+# --- URL DO NOVO GRÁFICO ATUALIZADA ---
+url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
+url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -185,8 +176,9 @@ imagem_base_pil = carregar_imagem_base(url_grafico_base)
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
+    # Ajustar simulação para os prováveis eixos do novo gráfico (0-50C, 0-100% UR)
     temp = round(random.uniform(0, 50), 1)    
-    umid = round(random.uniform(10, 100), 1) 
+    umid = round(random.uniform(0, 100), 1) # Ajustado para 0-100%
     vento_vel = round(random.uniform(0, 20), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
