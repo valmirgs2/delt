@@ -69,7 +69,7 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM DEPURAÇÃO AVANÇADA) ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS CORRIGIDAS) ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
     if imagem_base_pil is None: 
@@ -80,7 +80,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    # --- COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
+    # --- COORDENADAS E LIMITES DOS EIXOS ATUALIZADOS CONFORME ESPECIFICADO PELO USUÁRIO ---
     temp_min_grafico = 0.0   # Temperatura mínima no eixo X
     temp_max_grafico = 50.0  # Temperatura máxima no eixo X
     pixel_x_min_temp = 443   # Pixel X para 0°C
@@ -134,7 +134,10 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             print("DEBUG ÍCONE: Ícone aberto com Pillow.")
             
-            tamanho_icone = (35, 35) 
+            tamanho_icone_base = 35 
+            novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
+            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
+            
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
             
@@ -173,7 +176,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-url_icone_localizacao = "https://w7.pngwing.com/pngs/636/369/png-transparent-target-aim-darts-dart-board-bull-s-eye-dart-accuracy-precision-center.png" 
+url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
