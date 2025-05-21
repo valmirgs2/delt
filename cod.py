@@ -69,26 +69,26 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM DEPURAÇÃO AVANÇADA) ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
+    print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
     if imagem_base_pil is None: 
-        print("DEBUG ÍCONE: Imagem base é None, não é possível desenhar.")
+        print("DEBUG GRÁFICO: Imagem base é None, retornando None.")
         return None 
     
+    print(f"DEBUG GRÁFICO: Dimensões da imagem base: {imagem_base_pil.size}")
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    # --- NOVAS COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
-    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
-    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
-    pixel_x_min_temp = 440   # Pixel X para 0°C
-    pixel_x_max_temp = 1964  # Pixel X para 50°C
+    temp_min_grafico = 0.0
+    temp_max_grafico = 50.0
+    pixel_x_min_temp = 196
+    pixel_x_max_temp = 906
 
-    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
-    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
-    pixel_y_min_rh = 1448    # Pixel Y para 10% UR (base do gráfico)
-    pixel_y_max_rh = 240     # Pixel Y para 100% UR (topo do gráfico)
-
+    rh_min_grafico = 10.0
+    rh_max_grafico = 100.0
+    pixel_y_min_rh = 921 
+    pixel_y_max_rh = 356 
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -101,39 +101,49 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         range_rh_grafico = rh_max_grafico - rh_min_grafico
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
+        
+        print(f"DEBUG GRÁFICO: Coordenadas calculadas para o ponto: X={pixel_x_usuario}, Y={pixel_y_usuario}")
 
         # Desenhar o ponto vermelho
         raio_ponto = 8 
         cor_ponto = "red"
+        print(f"DEBUG GRÁFICO: A desenhar ponto vermelho em ({pixel_x_usuario}, {pixel_y_usuario}) com raio {raio_ponto}")
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
                       (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
                      fill=cor_ponto, outline="black", width=1) 
+        print("DEBUG GRÁFICO: Ponto vermelho desenhado.")
         
         try:
+            print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
             response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
+            print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
             response_icone.raise_for_status() 
             
             content_type_icone = response_icone.headers.get('content-type', '').lower()
+            print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
 
             if not (content_type_icone.startswith('image/png') or \
                     content_type_icone.startswith('image/jpeg') or \
                     content_type_icone.startswith('image/gif') or \
                     content_type_icone.startswith('image/webp')): 
                 st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
+                print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
                 return img_processada 
 
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
+            print("DEBUG ÍCONE: Ícone aberto com Pillow.")
             
-            tamanho_icone_base = 35 
-            novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
-            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
-            
+            tamanho_icone = (35, 35) 
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
+            print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
             
+            # Centralizar o ícone sobre o ponto
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = (pixel_y_usuario - raio_ponto) - 15 - tamanho_icone[1]
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
+            print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
+            print("DEBUG ÍCONE: Ícone colado na imagem.")
 
         except requests.exceptions.HTTPError as e_http: 
             print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
@@ -147,7 +157,10 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         except Exception as e_icon: 
             print(f"DEBUG ÍCONE: Erro geral e inesperado ao processar ícone: {e_icon}")
             st.warning(f"Ocorreu um erro inesperado ao carregar ou processar o ícone de marcação.")
+    else:
+        print("DEBUG GRÁFICO: temp_usuario ou rh_usuario é None, nenhum ponto/ícone será desenhado.")
             
+    print("DEBUG GRÁFICO: Retornando img_processada de desenhar_grafico_com_ponto.")
     return img_processada
 
 # --- LÓGICA DA APLICAÇÃO STREAMLIT ---
@@ -158,21 +171,27 @@ if 'last_update_time' not in st.session_state: st.session_state.last_update_time
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
-url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg" # Mantido o último gráfico solicitado
-url_icone_localizacao = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
+url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
+url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" # URL do ícone fornecida pelo utilizador
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
 def carregar_imagem_base(url):
     try:
+        print(f"DEBUG GRÁFICO: Tentando carregar imagem base de: {url}")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        return Image.open(BytesIO(response.content)).convert("RGBA")
+        img = Image.open(BytesIO(response.content)).convert("RGBA")
+        print(f"DEBUG GRÁFICO: Imagem base carregada com sucesso. Dimensões: {img.size}")
+        return img
     except requests.exceptions.RequestException as e:
         st.error(f"Erro ao baixar a imagem base do gráfico: {e}")
+        print(f"DEBUG GRÁFICO: Falha ao carregar imagem base: {e}")
         return None
 
 imagem_base_pil = carregar_imagem_base(url_grafico_base)
+if imagem_base_pil is None:
+    st.error("A imagem de fundo do gráfico não pôde ser carregada. O aplicativo pode não funcionar corretamente.")
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
@@ -195,12 +214,16 @@ def buscar_dados_ecowitt_simulado():
     }
 
 def atualizar_dados_estacao():
+    print("DEBUG APP: Iniciando atualizar_dados_estacao")
     dados_ecowitt = buscar_dados_ecowitt_simulado()
     if dados_ecowitt:
+        print(f"DEBUG APP: Dados simulados da Ecowitt: {dados_ecowitt}")
         temp_ar = dados_ecowitt["temperature_c"]
         umid_rel = dados_ecowitt["humidity_percent"]
         t_w, delta_t, condicao, desc_condicao, ponto_orvalho, sensacao_termica = calcular_delta_t_e_condicao(temp_ar, umid_rel)
+        
         if t_w is not None and delta_t is not None:
+            print("DEBUG APP: Cálculo de Delta T bem-sucedido.")
             dados_para_salvar = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
                 "humidity_percent": umid_rel, "wet_bulb_c": round(t_w, 2),
@@ -213,14 +236,22 @@ def atualizar_dados_estacao():
             salvar_dados_no_firestore_simulado(dados_para_salvar)
             st.session_state.dados_atuais = dados_para_salvar
             if imagem_base_pil:
+                print("DEBUG APP: Imagem base PIL existe, chamando desenhar_grafico_com_ponto.")
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, 
                     temp_ar, umid_rel, url_icone_localizacao
                 )
+                if st.session_state.imagem_grafico_atual:
+                    print("DEBUG APP: imagem_grafico_atual foi atualizada.")
+                else:
+                    print("DEBUG APP: desenhar_grafico_com_ponto retornou None.")
+            else:
+                print("DEBUG APP: Imagem base PIL é None, não pode desenhar no gráfico.")
             st.session_state.last_update_time = datetime.now()
             return True
         else: 
             st.error(f"Erro no cálculo Delta T: {condicao}") 
+            print(f"DEBUG APP: Erro no cálculo Delta T: {condicao}")
             dados_erro = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
                 "humidity_percent": umid_rel, "wet_bulb_c": None, "delta_t_c": None,
@@ -228,6 +259,7 @@ def atualizar_dados_estacao():
             }
             st.session_state.dados_atuais = dados_erro
             if imagem_base_pil: 
+                 print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto/ícone de qualquer maneira.")
                  st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
@@ -235,6 +267,7 @@ def atualizar_dados_estacao():
             return False 
     else:
         st.error("Não foi possível obter os dados da estação Ecowitt (simulado).")
+        print("DEBUG APP: Falha ao buscar dados da Ecowitt.")
     return False 
 
 agora_atual = datetime.now()
@@ -244,8 +277,13 @@ if st.session_state.last_update_time == datetime.min or \
         st.info("Usando dados simulados. Substitua `buscar_dados_ecowitt_simulado` pela sua integração real com a API Ecowitt.")
         st.session_state.simulacao_info_mostrada = True
     if atualizar_dados_estacao():
-        if 'running_first_time' not in st.session_state: st.rerun()
+        if 'running_first_time' not in st.session_state: 
+            print("DEBUG APP: Primeira atualização bem-sucedida, executando st.rerun()")
+            st.rerun()
         st.session_state.running_first_time = False
+    else:
+        print(f"DEBUG APP: Tentativa de atualização automática às {agora_atual.strftime('%H:%M:%S')} não bem-sucedida.")
+
 
 st.caption(f"Última atualização dos dados: {st.session_state.last_update_time.strftime('%d/%m/%Y %H:%M:%S') if st.session_state.last_update_time > datetime.min else 'Aguardando primeira atualização...'}")
 st.markdown("---")
