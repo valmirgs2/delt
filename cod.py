@@ -133,7 +133,7 @@ if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafi
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
 # --- URL DO NOVO ÍCONE ATUALIZADA ---
-url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
+url_icone_localizacao = "https://w7.pngwing.com/pngs/636/369/png-transparent-target-aim-darts-dart-board-bull-s-eye-dart-accuracy-precision-center.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
