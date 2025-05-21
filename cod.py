@@ -69,7 +69,7 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         return None, None, f"Erro no cálculo: {e}", None, None, None, None
 
 
-# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM DEPURAÇÃO AVANÇADA) ---
+# --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     if imagem_base_pil is None: 
         print("DEBUG ÍCONE: Imagem base é None, não é possível desenhar.")
@@ -100,42 +100,62 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
 
+        # Desenhar o ponto vermelho
         raio_ponto = 8 
         cor_ponto = "red"
-        draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
-                      (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
-                     fill=cor_ponto, outline="black", width=1) 
+        # Coordenadas do bounding box do ponto
+        ponto_bbox = [
+            (pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
+            (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)
+        ]
+        draw.ellipse(ponto_bbox, fill=cor_ponto, outline="black", width=1) 
         
         try:
-            print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
             response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
-            print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
             response_icone.raise_for_status() 
             
             content_type_icone = response_icone.headers.get('content-type', '').lower()
-            print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
 
             if not (content_type_icone.startswith('image/png') or \
                     content_type_icone.startswith('image/jpeg') or \
                     content_type_icone.startswith('image/gif') or \
                     content_type_icone.startswith('image/webp')): 
                 st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
-                print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
                 return img_processada 
 
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-            print("DEBUG ÍCONE: Ícone aberto com Pillow.")
             
-            tamanho_icone = (35, 35) 
+            tamanho_icone = (35, 35) # Ajuste o tamanho do ícone conforme necessário
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
-            print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
             
+            # --- SOMBRA SIMPLES PARA O ÍCONE ---
+            # Desenha um círculo cinza semi-transparente um pouco maior e deslocado
+            # para criar um efeito de sombra/destaque.
+            raio_sombra = tamanho_icone[0] // 2 + 3 # Raio da sombra um pouco maior que o ícone
+            offset_sombra_x = 2
+            offset_sombra_y = 2
+            sombra_bbox = [
+                (pixel_x_usuario - raio_sombra + offset_sombra_x, pixel_y_usuario - raio_sombra + offset_sombra_y),
+                (pixel_x_usuario + raio_sombra + offset_sombra_x, pixel_y_usuario + raio_sombra + offset_sombra_y)
+            ]
+            # Cor da sombra: cinza com transparência (R, G, B, Alpha)
+            # Alpha=0 é totalmente transparente, Alpha=255 é totalmente opaco.
+            cor_sombra = (100, 100, 100, 100) # Cinza escuro, semi-transparente
+            
+            # Criar uma imagem temporária para a sombra para aplicar transparência
+            sombra_layer = Image.new('RGBA', img_processada.size, (0,0,0,0))
+            draw_sombra = ImageDraw.Draw(sombra_layer)
+            draw_sombra.ellipse(sombra_bbox, fill=cor_sombra)
+            img_processada = Image.alpha_composite(img_processada.convert('RGBA'), sombra_layer)
+            draw = ImageDraw.Draw(img_processada) # Redefinir draw para a imagem com sombra
+
+
+            # --- POSICIONAR O ÍCONE CENTRALIZADO SOBRE O PONTO ---
+            # pos_x_icone e pos_y_icone são o canto superior esquerdo do ícone
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - 0 
-            print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 # Centraliza verticalmente no ponto
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-            print("DEBUG ÍCONE: Ícone colado na imagem.")
 
         except requests.exceptions.HTTPError as e_http: 
             print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
@@ -161,8 +181,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-# --- URL DO NOVO ÍCONE ATUALIZADA ---
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png"
+url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -311,7 +330,7 @@ with col_dados_estacao:
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_condicao = "#155724"
+            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724"
         else: 
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
