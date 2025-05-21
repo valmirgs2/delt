@@ -80,15 +80,16 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
     img_processada = imagem_base_pil.copy() 
     draw = ImageDraw.Draw(img_processada)
 
-    temp_min_grafico = 0.0
-    temp_max_grafico = 50.0
-    pixel_x_min_temp = 196
-    pixel_x_max_temp = 906
+    # --- NOVAS COORDENADAS E LIMITES DOS EIXOS CONFORME ESPECIFICADO PELO USUÁRIO ---
+    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
+    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
+    pixel_x_min_temp = 440   # Pixel X para 0°C
+    pixel_x_max_temp = 1964  # Pixel X para 50°C
 
-    rh_min_grafico = 10.0
-    rh_max_grafico = 100.0
-    pixel_y_min_rh = 921 
-    pixel_y_max_rh = 356 
+    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
+    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
+    pixel_y_min_rh = 1448    # Pixel Y para 10% UR (base do gráfico)
+    pixel_y_max_rh = 240     # Pixel Y para 100% UR (topo do gráfico)
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -171,8 +172,8 @@ if 'last_update_time' not in st.session_state: st.session_state.last_update_time
 if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
-url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" # URL do ícone fornecida pelo utilizador
+url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg" # Mantido o último gráfico solicitado
+url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
