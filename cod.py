@@ -99,7 +99,7 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
 
         # Desenhar o ponto vermelho
-        raio_ponto = 8
+        raio_ponto = 8 
         cor_ponto = "red"
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
                       (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
@@ -113,10 +113,8 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
             tamanho_icone = (35, 35) 
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            # Posiciona o ícone 15 pixels acima do centro do ponto
-            # pos_y_icone é a coordenada Y do canto superior esquerdo do ícone
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - 15 # (centro do ponto Y) - (altura do ícone) - (15 pixels de espaço)
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] - 15 
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
         except Exception as e_icon:
@@ -134,6 +132,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
+# --- URL DO NOVO ÍCONE ATUALIZADA ---
 url_icone_localizacao = "https://e7.pngegg.com/pngimages/753/160/png-clipart-target-illustration-darts-shooting-target-bullseye-red-target-miscellaneous-text.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
