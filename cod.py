@@ -103,7 +103,6 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
         # Desenhar o ponto vermelho
         raio_ponto = 8 
         cor_ponto = "red"
-        # Coordenadas do bounding box do ponto
         ponto_bbox = [
             (pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
             (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)
@@ -125,35 +124,23 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
 
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             
-            tamanho_icone = (35, 35) # Ajuste o tamanho do ícone conforme necessário
+            # AUMENTAR O TAMANHO DO ÍCONE EM 25%
+            tamanho_icone_base = 35 
+            novo_tamanho_icone = int(tamanho_icone_base * 1.25) # 35 * 1.25 = 43.75, arredondado para 44 ou 43
+            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
+            
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             
-            # --- SOMBRA SIMPLES PARA O ÍCONE ---
-            # Desenha um círculo cinza semi-transparente um pouco maior e deslocado
-            # para criar um efeito de sombra/destaque.
-            raio_sombra = tamanho_icone[0] // 2 + 3 # Raio da sombra um pouco maior que o ícone
-            offset_sombra_x = 2
-            offset_sombra_y = 2
-            sombra_bbox = [
-                (pixel_x_usuario - raio_sombra + offset_sombra_x, pixel_y_usuario - raio_sombra + offset_sombra_y),
-                (pixel_x_usuario + raio_sombra + offset_sombra_x, pixel_y_usuario + raio_sombra + offset_sombra_y)
-            ]
-            # Cor da sombra: cinza com transparência (R, G, B, Alpha)
-            # Alpha=0 é totalmente transparente, Alpha=255 é totalmente opaco.
-            cor_sombra = (100, 100, 100, 100) # Cinza escuro, semi-transparente
-            
-            # Criar uma imagem temporária para a sombra para aplicar transparência
-            sombra_layer = Image.new('RGBA', img_processada.size, (0,0,0,0))
-            draw_sombra = ImageDraw.Draw(sombra_layer)
-            draw_sombra.ellipse(sombra_bbox, fill=cor_sombra)
-            img_processada = Image.alpha_composite(img_processada.convert('RGBA'), sombra_layer)
-            draw = ImageDraw.Draw(img_processada) # Redefinir draw para a imagem com sombra
+            # REMOVIDA A LÓGICA DA SOMBRA
+            # sombra_layer = Image.new('RGBA', img_processada.size, (0,0,0,0))
+            # draw_sombra = ImageDraw.Draw(sombra_layer)
+            # draw_sombra.ellipse(sombra_bbox, fill=cor_sombra)
+            # img_processada = Image.alpha_composite(img_processada.convert('RGBA'), sombra_layer)
+            # draw = ImageDraw.Draw(img_processada) 
 
-
-            # --- POSICIONAR O ÍCONE CENTRALIZADO SOBRE O PONTO ---
-            # pos_x_icone e pos_y_icone são o canto superior esquerdo do ícone
+            # POSICIONAR O ÍCONE CENTRALIZADO SOBRE O PONTO
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 # Centraliza verticalmente no ponto
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
             
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
 
@@ -330,7 +317,7 @@ with col_dados_estacao:
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724"
+            cor_fundo_vento = "#D4EDDA"; cor_texto_condicao = "#155724"
         else: 
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
