@@ -1,8 +1,8 @@
 import streamlit as st
 import math
-from PIL import Image, ImageFilter # Adicionado Pillow
-import requests # Adicionado para carregar imagem de URL
-from io import BytesIO # Adicionado para carregar imagem de URL
+from PIL import Image, ImageDraw # Importar ImageDraw
+import requests
+from io import BytesIO
 
 # --- Funções de Manipulação de Imagem ---
 def carregar_imagem_de_url(url):
@@ -25,35 +25,15 @@ def mapear_valor(valor, de_min, de_max, para_min, para_max):
         return para_min
     return (valor_clamped - de_min) * (para_max - para_min) / (de_max - de_min) + para_min
 
-def sobrepor_alvo_no_grafico(img_grafico_base, img_alvo_url, temp_para_plotar, umidade_para_plotar, params_grafico):
-    # --- Início DEBUG dentro de sobrepor_alvo_no_grafico ---
-    st.markdown("---")
-    st.subheader("DEBUG: `sobrepor_alvo_no_grafico`")
-
+def sobrepor_ponto_no_grafico(img_grafico_base, temp_para_plotar, umidade_para_plotar, params_grafico):
     if img_grafico_base is None:
-        st.error("DEBUG Fun_Sobrepor: img_grafico_base é None.")
-        st.markdown("---")
+        st.error("Erro: img_grafico_base é None em sobrepor_ponto_no_grafico.")
         return None
 
-    st.write(f"DEBUG Fun_Sobrepor: Valores de entrada: Temp={temp_para_plotar}, Umidade={umidade_para_plotar}")
-    st.write(f"DEBUG Fun_Sobrepor: Dimensões do gráfico base original: {img_grafico_base.size}")
-
-    img_alvo = carregar_imagem_de_url(img_alvo_url)
-    if img_alvo is None:
-        st.warning("DEBUG Fun_Sobrepor: Não foi possível carregar a imagem do alvo DENTRO da função.")
-        st.markdown("---")
-        return img_grafico_base.copy()
-
-    st.write(f"DEBUG Fun_Sobrepor: Alvo carregado: {img_alvo.size}, Modo: {img_alvo.mode}")
-
-    tamanho_alvo = (40, 40)
-    try:
-        img_alvo_redimensionado = img_alvo.resize(tamanho_alvo, Image.Resampling.LANCZOS) # Use nova variável
-        st.write(f"DEBUG Fun_Sobrepor: Alvo redimensionado para: {img_alvo_redimensionado.size}")
-    except Exception as e:
-        st.error(f"DEBUG Fun_Sobrepor: Erro ao redimensionar imagem do alvo: {e}")
-        st.markdown("---")
-        return img_grafico_base.copy()
+    img_com_ponto = img_grafico_base.copy()
+    draw = ImageDraw.Draw(img_com_ponto)
+    cor_ponto = (0, 0, 0) # Preto
+    raio_ponto = 5 # Tamanho do ponto, ajuste conforme necessário
 
     coord_x = mapear_valor(
         temp_para_plotar,
@@ -65,22 +45,16 @@ def sobrepor_alvo_no_grafico(img_grafico_base, img_alvo_url, temp_para_plotar, u
         params_grafico["umidade_min_dado_eixo_y"], params_grafico["umidade_max_dado_eixo_y"],
         params_grafico["umidade_pixel_para_min_dado_eixo_y"], params_grafico["umidade_pixel_para_max_dado_eixo_y"]
     )
-    st.write(f"DEBUG Fun_Sobrepor: Coordenadas calculadas (centro do alvo): X={coord_x:.2f}, Y={coord_y:.2f}")
 
-    pos_x_paste = int(coord_x - img_alvo_redimensionado.width / 2)
-    pos_y_paste = int(coord_y - img_alvo_redimensionado.height / 2)
-    st.write(f"DEBUG Fun_Sobrepor: Posição de colagem (canto sup. esq. do alvo): X_paste={pos_x_paste}, Y_paste={pos_y_paste}")
+    # Calcular as coordenadas para o retângulo que envolve o círculo
+    x0 = int(coord_x - raio_ponto)
+    y0 = int(coord_y - raio_ponto)
+    x1 = int(coord_x + raio_ponto)
+    y1 = int(coord_y + raio_ponto)
 
-    img_com_alvo = img_grafico_base.copy()
-    if img_alvo_redimensionado.mode == 'RGBA':
-        img_com_alvo.paste(img_alvo_redimensionado, (pos_x_paste, pos_y_paste), img_alvo_redimensionado)
-    else:
-        img_com_alvo.paste(img_alvo_redimensionado, (pos_x_paste, pos_y_paste))
-    
-    st.write("DEBUG Fun_Sobrepor: Colagem (paste) do alvo concluída.")
-    st.markdown("---")
-    # --- Fim DEBUG dentro de sobrepor_alvo_no_grafico ---
-    return img_com_alvo
+    draw.ellipse([x0, y0, x1, y1], fill=cor_ponto)
+
+    return img_com_ponto
 
 # --- Suas funções de cálculo (exatamente como antes) ---
 def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
@@ -110,33 +84,10 @@ def calcular_delta_t(t_bs, rh):
 # --- Interface Streamlit ---
 st.set_page_config(page_title="Calculadora Delta T", layout="wide")
 st.title("💧 Calculadora de Delta T para Pulverização")
-st.caption("Baseada na fórmula de Stull. O ponto no gráfico indica a condição de entrada.")
+st.caption("Baseada na fórmula de Stull. O ponto preto no gráfico indica a condição de entrada.")
 
-# --- Configuração do Gráfico e Alvo ---
+# --- Configuração do Gráfico ---
 URL_GRAFICO_BASE = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-URL_ALVO_EMOJI = "https://i.postimg.cc/wv3SQqLg/Emoji-Alvo-png-1.webp" # URL ATUALIZADA
-
-# --- Início do código de teste de carregamento de imagem (ADICIONADO PARA DEBUG) ---
-st.markdown("---")
-st.subheader("--- Teste de Carregamento de Imagens (Início da Página) ---")
-
-st.write("Tentando carregar imagem do GRÁFICO BASE:")
-img_base_teste_inicial = carregar_imagem_de_url(URL_GRAFICO_BASE)
-if img_base_teste_inicial:
-    st.image(img_base_teste_inicial, caption="DEBUG: Teste GRÁFICO BASE Carregado OK", width=150) # Menor para não ocupar tanto espaço
-    st.write(f"DEBUG: Dimensões Gráfico Base: {img_base_teste_inicial.size}, Modo: {img_base_teste_inicial.mode}")
-else:
-    st.error("DEBUG: FALHA ao carregar imagem do GRÁFICO BASE para teste.")
-
-st.write("Tentando carregar imagem do ALVO:")
-img_alvo_teste_inicial = carregar_imagem_de_url(URL_ALVO_EMOJI)
-if img_alvo_teste_inicial:
-    st.image(img_alvo_teste_inicial, caption="DEBUG: Teste ALVO Carregado OK", width=80)
-    st.write(f"DEBUG: Dimensões Alvo: {img_alvo_teste_inicial.size}, Modo: {img_alvo_teste_inicial.mode}")
-else:
-    st.error("DEBUG: FALHA ao carregar imagem do ALVO para teste.")
-st.markdown("---")
-# --- Fim do código de teste ---
 
 PARAMETROS_GRAFICO = {
     "temp_min_dado_eixo_x": 0.0,
@@ -188,7 +139,7 @@ with col_resultados:
             if img_grafico_base_original:
                 st.image(img_grafico_base_original, caption="Gráfico de Referência", use_column_width=True)
             else:
-                st.warning("Não foi possível carregar a imagem do gráfico de referência (após erro de cálculo).")
+                st.warning("Não foi possível carregar a imagem do gráfico de referência.")
         elif t_w_calculada is not None:
             st.metric(label="Temperatura Bulbo Úmido", value=f"{t_w_calculada:.2f} °C")
             st.metric(label="Delta T", value=f"{resultado_delta_t:.2f} °C", delta_color="off")
@@ -204,28 +155,20 @@ with col_resultados:
                 st.error(f"🟠 Delta T > 10°C ({resultado_delta_t:.1f}°C): NÃO RECOMENDADO. Alto risco de deriva por evaporação excessiva das gotas.")
 
             if img_grafico_base_original:
-                st.write("DEBUG: Entrando na lógica para sobrepor o alvo...") # DEBUG
-                imagem_com_alvo = sobrepor_alvo_no_grafico(
+                imagem_com_ponto = sobrepor_ponto_no_grafico(
                     img_grafico_base_original,
-                    URL_ALVO_EMOJI,
                     temp_bulbo_seco_input,
                     umidade_relativa_input,
                     PARAMETROS_GRAFICO
                 )
-                if imagem_com_alvo:
-                    st.write("DEBUG: Imagem com alvo gerada. Exibindo...") # DEBUG
-                    st.image(imagem_com_alvo, caption=f"Ponto no Gráfico: Temp={temp_bulbo_seco_input}°C, UR={umidade_relativa_input}%", use_column_width=True)
-                else:
-                    st.error("DEBUG: Falha ao gerar imagem com alvo. `imagem_com_alvo` é None.") # DEBUG
-                    st.write("DEBUG: Exibindo gráfico base original como fallback.") #DEBUG
-                    st.image(img_grafico_base_original, caption="Gráfico de Referência (Falha ao plotar alvo)", use_column_width=True)
-
+                if imagem_com_ponto:
+                    st.image(imagem_com_ponto, caption=f"Ponto no Gráfico: Temp={temp_bulbo_seco_input}°C, UR={umidade_relativa_input}%", use_column_width=True)
             else:
-                st.warning("Não foi possível carregar a imagem base do gráfico para plotar o alvo (img_grafico_base_original is None).")
+                st.warning("Não foi possível carregar a imagem base do gráfico para plotar o ponto.")
         else:
             st.error("Ocorreu um erro desconhecido no cálculo.")
             if img_grafico_base_original:
-                st.image(img_grafico_base_original, caption="Gráfico de Referência (após erro desconhecido)", use_column_width=True)
+                st.image(img_grafico_base_original, caption="Gráfico de Referência", use_column_width=True)
     else:
         st.info("Ajuste os valores à esquerda e clique no botão para calcular e ver o ponto no gráfico.")
         st.metric(label="Temperatura Bulbo Úmido", value="- °C")
@@ -234,7 +177,7 @@ with col_resultados:
         if img_grafico_base_original:
             st.image(img_grafico_base_original, caption="Gráfico de Referência (Aguardando cálculo)", use_column_width=True)
         else:
-            st.warning("Não foi possível carregar a imagem do gráfico de referência (estado inicial).")
+            st.warning("Não foi possível carregar a imagem do gráfico de referência.")
 
 st.markdown("---")
 st.markdown("A **Temperatura de Bulbo Úmido ($T_w$)** é a menor temperatura para a qual o ar pode ser resfriado por evaporação de água nele, a pressão constante. A fórmula de Stull é uma aproximação empírica.")
