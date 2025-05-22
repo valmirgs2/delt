@@ -102,7 +102,7 @@ st.caption("Baseada na fórmula de Stull para Temperatura de Bulbo Úmido. O pon
 # --- Configuração do Gráfico e Alvo ---
 # Use a URL da imagem do gráfico que você está utilizando
 URL_GRAFICO_BASE = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg" # Ou a URL correta da sua imagem de gráfico
-URL_ALVO_EMOJI = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png"
+URL_ALVO_EMOJI = "https://i.postimg.cc/wv3SQqLg/Emoji-Alvo-png-1.webp"
 
 # PARAMETROS DO GRÁFICO BASEADOS NAS SUAS INFORMAÇÕES:
 PARAMETROS_GRAFICO = {
