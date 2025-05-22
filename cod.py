@@ -1,28 +1,10 @@
 import streamlit as st
 import math
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from io import BytesIO
-from datetime import datetime, timedelta
-import time
-import random # Para simular dados da Ecowitt
 
-# --- Simulação do Firestore (substitua pela integração real) ---
-if 'db_historico' not in st.session_state:
-    st.session_state.db_historico = []
-
-def salvar_dados_no_firestore_simulado(dados):
-    # print(f"Simulando salvamento no Firestore: {dados}")
-    st.session_state.db_historico.append(dados)
-    max_historico = 100
-    if len(st.session_state.db_historico) > max_historico:
-        st.session_state.db_historico = st.session_state.db_historico[-max_historico:]
-
-def carregar_historico_do_firestore_simulado():
-    # print("Simulando carregamento do Firestore.")
-    return sorted(st.session_state.db_historico, key=lambda x: x['timestamp'], reverse=True)
-
-# --- FUNÇÕES DE CÁLCULO ---
+# --- SUAS FUNÇÕES DE CÁLCULO (sem alteração) ---
 def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
     term1_factor = (rh + 8.313659)**0.5
     term1 = t_bs * math.atan(0.151977 * term1_factor)
@@ -35,413 +17,148 @@ def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
     t_w = term1 + term2 - term3 + term4 - constante_final
     return t_w
 
-def calcular_delta_t_e_condicao(t_bs, rh):
+def calcular_delta_t(t_bs, rh):
     if not (0 <= rh <= 100):
-        return None, None, "Erro: Umidade Relativa fora da faixa (0-100%).", None, None, None, None
-    if not (0 <= t_bs <= 50): 
-        return None, None, f"Erro: Temperatura do Ar ({t_bs}°C) fora da faixa de cálculo (0-50°C).", None, None, None, None
+        return "Erro: A umidade relativa deve estar entre 0 e 100%.", None
+    # Ajustando a faixa de temperatura de bulbo seco conforme o gráfico e inputs anteriores
+    if not (0 <= t_bs <= 50): # Faixa dos inputs e do gráfico
+        return f"Erro: Temperatura de bulbo seco ({t_bs}°C) fora da faixa esperada (0 a 50°C).", None
     try:
         t_w = calcular_temperatura_bulbo_umido_stull(t_bs, rh)
         delta_t = t_bs - t_w
-        
-        ponto_orvalho = t_bs - ((100 - rh) / 5.0)
-        sensacao_termica = t_bs + 0.3 * (rh/100 * 6.105 * math.exp(17.27 * t_bs / (237.7 + t_bs)) - 10)
-        if rh < 50 and t_bs > 25 : sensacao_termica = t_bs + (t_bs-25)/5
-        elif rh > 70 and t_bs > 25: sensacao_termica = t_bs + (rh-70)/10 + (t_bs-25)/3
-
-        condicao_texto = "-"
-        descricao_condicao = ""
-        if delta_t < 2:
-            condicao_texto = "INADEQUADA"
-            descricao_condicao = "Risco elevado de deriva e escorrimento."
-        elif delta_t > 10:
-            condicao_texto = "ARRISCADA"
-            descricao_condicao = "Risco de evaporação excessiva das gotas."
-        elif 2 <= delta_t <= 8:
-            condicao_texto = "ADEQUADA"
-            descricao_condicao = "Condições ideais para pulverização."
-        else:
-            condicao_texto = "ATENÇÃO"
-            descricao_condicao = f"Condição limite (Delta T {delta_t:.1f}°C)."
-        
-        return t_w, delta_t, condicao_texto, descricao_condicao, ponto_orvalho, sensacao_termica
+        return delta_t, t_w
     except Exception as e:
-        return None, None, f"Erro no cálculo: {e}", None, None, None, None
+        return f"Erro no cálculo: {e}", None
 
+# --- FUNÇÃO PARA DESENHAR AS LINHAS NA IMAGEM (ajustes nos limites se necessário) ---
+def desenhar_linhas_no_grafico(imagem_base_pil, temp_usuario, rh_usuario):
+    img_com_linhas = imagem_base_pil.copy()
+    draw = ImageDraw.Draw(img_com_linhas)
 
-# --- FUNÇÃO PARA DESENHAR PONTO NO GRÁFICO ---
-def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone=None): # url_icone agora é opcional
-    print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
-    if imagem_base_pil is None: 
-        print("DEBUG GRÁFICO: Imagem base é None, retornando None.")
-        return None 
-    
-    print(f"DEBUG GRÁFICO: Dimensões da imagem base: {imagem_base_pil.size}")
-    img_processada = imagem_base_pil.copy() 
-    draw = ImageDraw.Draw(img_processada)
+    # Coordenadas e escalas do gráfico (ajuste fino pode ser necessário)
+    temp_min_grafico = 5.0
+    temp_max_grafico = 45.0 # O gráfico parece ir até 45C
+    pixel_x_min_temp = 115  # Pixel X para temp_min_grafico (estimativa)
+    pixel_x_max_temp = 960  # Pixel X para temp_max_grafico (estimativa)
 
-    # Coordenadas e limites dos eixos conforme especificado pelo usuário
-    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
-    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
-    pixel_x_min_temp = 443   # Pixel X para 0°C
-    pixel_x_max_temp = 1965  # Pixel X para 50°C
+    rh_min_grafico = 10.0
+    rh_max_grafico = 90.0 # O gráfico mostra linhas de RH até 90%
+    pixel_y_min_rh = 890  # Pixel Y para rh_min_grafico (base do gráfico)
+    pixel_y_max_rh = 100  # Pixel Y para rh_max_grafico (topo das linhas de RH)
 
-    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
-    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
-    pixel_y_min_rh = 1450    # Pixel Y para 10% UR (base do gráfico)
-    pixel_y_max_rh = 242     # Pixel Y para 100% UR (topo do gráfico)
+    # Verificar se os valores estão dentro da faixa plotável do gráfico
+    # É importante que temp_usuario e rh_usuario estejam dentro dos limites visuais do gráfico
+    # para que as linhas apareçam corretamente.
+    plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
+    plotar_rh = max(rh_min_grafico, min(rh_usuario, rh_max_grafico))
 
-    if temp_usuario is not None and rh_usuario is not None:
-        plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
-        plotar_rh = max(rh_min_grafico, min(rh_usuario, rh_max_grafico))
+    percent_temp = (plotar_temp - temp_min_grafico) / (temp_max_grafico - temp_min_grafico)
+    pixel_x_usuario = pixel_x_min_temp + percent_temp * (pixel_x_max_temp - pixel_x_min_temp)
 
-        range_temp_grafico = temp_max_grafico - temp_min_grafico
-        percent_temp = (plotar_temp - temp_min_grafico) / range_temp_grafico if range_temp_grafico != 0 else 0
-        pixel_x_usuario = int(pixel_x_min_temp + percent_temp * (pixel_x_max_temp - pixel_x_min_temp))
+    percent_rh = (plotar_rh - rh_min_grafico) / (rh_max_grafico - rh_min_grafico)
+    pixel_y_usuario = pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)
 
-        range_rh_grafico = rh_max_grafico - rh_min_grafico
-        percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
-        pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
-        
-        print(f"DEBUG GRÁFICO: Coordenadas calculadas para o ponto: X={pixel_x_usuario}, Y={pixel_y_usuario}")
+    # Desenhar linhas
+    draw.line([(pixel_x_usuario, pixel_y_min_rh), (pixel_x_usuario, pixel_y_max_rh)], fill="blue", width=4)
+    draw.line([(pixel_x_min_temp, pixel_y_usuario), (pixel_x_max_temp, pixel_y_usuario)], fill="blue", width=4)
 
-        # Desenhar o ponto vermelho
-        raio_ponto = 8 
-        cor_ponto = "red"
-        print(f"DEBUG GRÁFICO: A desenhar ponto vermelho em ({pixel_x_usuario}, {pixel_y_usuario}) com raio {raio_ponto}")
-        draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
-                      (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
-                     fill=cor_ponto, outline="black", width=1) 
-        print("DEBUG GRÁFICO: Ponto vermelho desenhado.")
-        
-        # REMOVIDA A LÓGICA DE DESENHAR O ÍCONE
-        # try:
-        #     print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
-        #     response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
-        #     print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
-        #     response_icone.raise_for_status() 
-            
-        #     content_type_icone = response_icone.headers.get('content-type', '').lower()
-        #     print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
+    raio_circulo = 8
+    draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
+                  (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
+                 fill="red", outline="black", width=2)
+    return img_com_linhas
 
-        #     if not (content_type_icone.startswith('image/png') or \
-        #             content_type_icone.startswith('image/jpeg') or \
-        #             content_type_icone.startswith('image/gif') or \
-        #             content_type_icone.startswith('image/webp')): 
-        #         st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
-        #         print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
-        #         return img_processada 
+# --- Interface Streamlit ---
+st.set_page_config(page_title="Análise Delta T para Pulverização", layout="wide")
+st.title("💧 Análise Delta T e Condições para Pulverização")
+st.caption(f"Última atualização dos dados da calculadora: {math.pi:.2f} (exemplo, poderia ser uma data/hora real)") # Exemplo de timestamp
 
-        #     icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
-        #     print("DEBUG ÍCONE: Ícone aberto com Pillow.")
-            
-        #     tamanho_icone_base = 35 
-        #     novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
-        #     tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
-            
-        #     icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
-        #     print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
-            
-        #     # Centralizar o ícone sobre o ponto
-        #     pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-        #     pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
-        #     print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
-            
-        #     img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-        #     print("DEBUG ÍCONE: Ícone colado na imagem.")
+url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
+imagem_base_pil = None
+try:
+    response = requests.get(url_grafico_base)
+    response.raise_for_status()
+    imagem_base_pil = Image.open(BytesIO(response.content)).convert("RGBA")
+except requests.exceptions.RequestException as e:
+    st.error(f"Erro ao baixar a imagem base do gráfico: {e}")
 
-        # except requests.exceptions.HTTPError as e_http: 
-        #     print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
-        #     st.warning(f"Não foi possível descarregar o ícone de marcação (Erro HTTP {response_icone.status_code}). Verifique se o URL está correto e acessível: {url_icone}")
-        # except requests.exceptions.RequestException as e_req: 
-        #     print(f"DEBUG ÍCONE: Erro de rede ao descarregar ícone: {e_req}")
-        #     st.warning(f"Não foi possível descarregar o ícone de marcação (erro de rede). Verifique sua conexão e o URL do ícone.")
-        # except IOError as e_io: 
-        #     print(f"DEBUG ÍCONE: Erro do Pillow ao abrir/processar o ícone (IOError): {e_io}")
-        #     st.warning(f"O ficheiro do ícone pode estar corrompido ou não é um formato de imagem suportado. Verifique o URL do ícone.")
-        # except Exception as e_icon: 
-        #     print(f"DEBUG ÍCONE: Erro geral e inesperado ao processar ícone: {e_icon}")
-        #     st.warning(f"Ocorreu um erro inesperado ao carregar ou processar o ícone de marcação.")
-    else:
-        print("DEBUG GRÁFICO: temp_usuario ou rh_usuario é None, nenhum ponto será desenhado.")
-            
-    print("DEBUG GRÁFICO: Retornando img_processada de desenhar_grafico_com_ponto.")
-    return img_processada
+# Layout em três colunas para simular blocos de informação
+col_entrada, col_analise, col_grafico_dinamico = st.columns([1, 1, 1.5]) # Ajuste as proporções
 
-# --- LÓGICA DA APLICAÇÃO STREAMLIT ---
-st.set_page_config(page_title="Estação Meteorológica - BASE AGRO", layout="wide")
-st.title("🌦️ Estação Meteorológica - BASE AGRO")
+with col_entrada:
+    st.subheader("Parâmetros Atuais")
+    temp_bulbo_seco_input = st.number_input(
+        "Temperatura de Bulbo Seco (°C):",
+        min_value=0.0, max_value=50.0, value=25.0, step=0.1, format="%.1f",
+        help="Temperatura atual do ar medida por um termômetro de bulbo seco."
+    )
+    umidade_relativa_input = st.number_input(
+        "Umidade Relativa (%):",
+        min_value=0.0, max_value=100.0, value=60.0, step=0.1, format="%.1f",
+        help="Percentual de umidade no ar em relação ao máximo que poderia conter naquela temperatura."
+    )
+    calcular_btn = st.button("Analisar Condições", type="primary", use_container_width=True)
 
-if 'last_update_time' not in st.session_state: st.session_state.last_update_time = datetime.min
-if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
-if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
-
-url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-# url_icone_localizacao não é mais usado diretamente para desenhar, mas pode ser mantido se houver outra utilização
-# url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
-INTERVALO_ATUALIZACAO_MINUTOS = 5
-
-@st.cache_data(ttl=3600)
-def carregar_imagem_base(url):
-    try:
-        print(f"DEBUG GRÁFICO: Tentando carregar imagem base de: {url}")
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        img = Image.open(BytesIO(response.content)).convert("RGBA")
-        print(f"DEBUG GRÁFICO: Imagem base carregada com sucesso. Dimensões: {img.size}")
-        return img
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erro ao baixar a imagem base do gráfico: {e}")
-        print(f"DEBUG GRÁFICO: Falha ao carregar imagem base: {e}")
-        return None
-
-imagem_base_pil = carregar_imagem_base(url_grafico_base)
-if imagem_base_pil is None:
-    st.error("A imagem de fundo do gráfico não pôde ser carregada. O aplicativo pode não funcionar corretamente.")
-
-def buscar_dados_ecowitt_simulado():
-    time.sleep(0.5)
-    temp = round(random.uniform(0, 50), 1)    
-    umid = round(random.uniform(10, 100), 1) 
-    vento_vel = round(random.uniform(0, 20), 1)
-    vento_raj = round(vento_vel + random.uniform(0, 15), 1)
-    pressao = round(random.uniform(1000, 1025), 1)
-    direcoes_vento = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"]
-    vento_dir = random.choice(direcoes_vento)
-    altitude = 314
-    uv_index = random.randint(0, 11)
-    luminosidade = random.randint(1000, 80000)
-    radiacao_solar = random.randint(50, 900)
-    return {
-        "temperature_c": temp, "humidity_percent": umid,
-        "wind_speed_kmh": vento_vel, "wind_gust_kmh": vento_raj,
-        "pressure_hpa": pressao, "wind_direction": vento_dir, "altitude_m": altitude,
-        "uv_index": uv_index, "luminosity_lux": luminosidade, "solar_radiation_wm2": radiacao_solar
-    }
-
-def atualizar_dados_estacao():
-    print("DEBUG APP: Iniciando atualizar_dados_estacao")
-    dados_ecowitt = buscar_dados_ecowitt_simulado()
-    if dados_ecowitt:
-        print(f"DEBUG APP: Dados simulados da Ecowitt: {dados_ecowitt}")
-        temp_ar = dados_ecowitt["temperature_c"]
-        umid_rel = dados_ecowitt["humidity_percent"]
-        t_w, delta_t, condicao, desc_condicao, ponto_orvalho, sensacao_termica = calcular_delta_t_e_condicao(temp_ar, umid_rel)
-        
-        if t_w is not None and delta_t is not None:
-            print("DEBUG APP: Cálculo de Delta T bem-sucedido.")
-            dados_para_salvar = {
-                "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
-                "humidity_percent": umid_rel, "wet_bulb_c": round(t_w, 2),
-                "delta_t_c": round(delta_t, 2), "condition_text": condicao,
-                "condition_description": desc_condicao,
-                "dew_point_c": round(ponto_orvalho,1) if ponto_orvalho is not None else None,
-                "feels_like_c": round(sensacao_termica,1) if sensacao_termica is not None else None,
-                **dados_ecowitt
-            }
-            salvar_dados_no_firestore_simulado(dados_para_salvar)
-            st.session_state.dados_atuais = dados_para_salvar
-            if imagem_base_pil:
-                print("DEBUG APP: Imagem base PIL existe, chamando desenhar_grafico_com_ponto.")
-                st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, 
-                    temp_ar, umid_rel # url_icone não é mais necessária aqui se não for desenhar
-                )
-                if st.session_state.imagem_grafico_atual:
-                    print("DEBUG APP: imagem_grafico_atual foi atualizada.")
-                else:
-                    print("DEBUG APP: desenhar_grafico_com_ponto retornou None.")
-            else:
-                print("DEBUG APP: Imagem base PIL é None, não pode desenhar no gráfico.")
-            st.session_state.last_update_time = datetime.now()
-            return True
-        else: 
-            st.error(f"Erro no cálculo Delta T: {condicao}") 
-            print(f"DEBUG APP: Erro no cálculo Delta T: {condicao}")
-            dados_erro = {
-                "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
-                "humidity_percent": umid_rel, "wet_bulb_c": None, "delta_t_c": None,
-                "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
-            }
-            st.session_state.dados_atuais = dados_erro
-            if imagem_base_pil: 
-                 print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto de qualquer maneira.")
-                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, temp_ar, umid_rel
-                )
-            st.session_state.last_update_time = datetime.now() 
-            return False 
-    else:
-        st.error("Não foi possível obter os dados da estação Ecowitt (simulado).")
-        print("DEBUG APP: Falha ao buscar dados da Ecowitt.")
-    return False 
-
-agora_atual = datetime.now()
-if st.session_state.last_update_time == datetime.min or \
-   st.session_state.last_update_time < (agora_atual - timedelta(minutes=INTERVALO_ATUALIZACAO_MINUTOS)):
-    if st.session_state.last_update_time == datetime.min and 'simulacao_info_mostrada' not in st.session_state:
-        st.info("Usando dados simulados. Substitua `buscar_dados_ecowitt_simulado` pela sua integração real com a API Ecowitt.")
-        st.session_state.simulacao_info_mostrada = True
-    if atualizar_dados_estacao():
-        if 'running_first_time' not in st.session_state: 
-            print("DEBUG APP: Primeira atualização bem-sucedida, executando st.rerun()")
-            st.rerun()
-        st.session_state.running_first_time = False
-    else:
-        print(f"DEBUG APP: Tentativa de atualização automática às {agora_atual.strftime('%H:%M:%S')} não bem-sucedida.")
-
-
-st.caption(f"Última atualização dos dados: {st.session_state.last_update_time.strftime('%d/%m/%Y %H:%M:%S') if st.session_state.last_update_time > datetime.min else 'Aguardando primeira atualização...'}")
-st.markdown("---")
-
-col_dados_estacao, col_grafico_delta_t = st.columns([1.2, 1.5])
-
-with col_dados_estacao:
-    st.subheader("Estação Meteorológica (Dados Atuais)")
-    dados = st.session_state.dados_atuais
-    if dados:
-        st.markdown("##### 🌡️ Temperatura e Umidade")
-        col_temp1, col_temp2 = st.columns(2)
-        with col_temp1:
-            st.metric(label="Temperatura do Ar", value=f"{dados.get('temperature_c', '-'):.1f} °C")
-            st.metric(label="Ponto de Orvalho", value=f"{dados.get('dew_point_c', '-'):.1f} °C" if dados.get('dew_point_c') is not None else "- °C")
-        with col_temp2:
-            st.metric(label="Umidade Relativa", value=f"{dados.get('humidity_percent', '-'):.1f} %")
-            st.metric(label="Sensação Térmica", value=f"{dados.get('feels_like_c', '-'):.1f} °C" if dados.get('feels_like_c') is not None else "- °C")
-        
-        st.markdown("##### 🌱 Delta T")
-        condicao_atual_texto = dados.get('condition_text', '-')
-        desc_condicao_atual = dados.get('condition_description', 'Aguardando dados...')
-        cor_fundo_condicao = "lightgray"; cor_texto_condicao = "black"
-        if condicao_atual_texto == "INADEQUADA": cor_fundo_condicao = "#FFD2D2"; cor_texto_condicao = "#D8000C"
-        elif condicao_atual_texto == "ARRISCADA": cor_fundo_condicao = "#FFF3CD"; cor_texto_condicao = "#B08D00"
-        elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#D4EDDA"; cor_texto_condicao = "#155724"
-        elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#A76800"
-        elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#721C24"
-        
-        delta_t_val_num = dados.get('delta_t_c', None)
-        delta_t_display_val = f"{delta_t_val_num:.2f}" if delta_t_val_num is not None else "-"
-        
-        st.markdown(f"""
-        <div style='text-align: center; margin-bottom: 10px;'>
-            <span style='font-size: 1.1em; font-weight: bold;'>Valor Delta T:</span><br>
-            <span style='font-size: 2.2em; font-weight: bold; color: #007bff;'>{delta_t_display_val} °C</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div style='background-color: {cor_fundo_condicao}; color: {cor_texto_condicao}; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 5px;'>
-            <strong style='font-size: 1.1em;'>Condição Delta T: {condicao_atual_texto}</strong>
-        </div>
-        <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_atual}</p>
-        """, unsafe_allow_html=True)
-        st.markdown("---")
-
-        st.markdown("##### 💨 Vento e Pressão")
-        col_vento1, col_vento2 = st.columns(2)
-        vento_velocidade_atual = dados.get('wind_speed_kmh', 0)
-        
-        condicao_vento_texto = "-"
-        desc_condicao_vento = ""
-        cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
-
-        if vento_velocidade_atual <= 3:
-            condicao_vento_texto = "ARRISCADO"
-            desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800"
-        elif 3 < vento_velocidade_atual <= 10:
-            condicao_vento_texto = "EXCELENTE"
-            desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_condicao = "#155724"
-        else: 
-            condicao_vento_texto = "MUITO PERIGOSO"
-            desc_condicao_vento = "Risco de deriva."
-            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C"
-            
-        with col_vento1:
-            st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
-            st.metric(label="Pressão", value=f"{dados.get('pressure_hpa', '-'):.1f} hPa")
-        with col_vento2:
-            st.metric(label="Rajadas", value=f"{dados.get('wind_gust_kmh', '-'):.1f} km/h")
-            st.metric(label="Direção Vento", value=f"{dados.get('wind_direction', '-')}")
-        
-        st.markdown(f"""
-        <div style='background-color: {cor_fundo_vento}; color: {cor_texto_vento}; padding: 10px; border-radius: 5px; text-align: center; margin-top: 10px; margin-bottom: 5px;'>
-            <strong style='font-size: 1.1em;'>Condição do Vento: {condicao_vento_texto}</strong>
-        </div>
-        <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_vento}</p>
-        """, unsafe_allow_html=True)
-        st.markdown("---")
-
-    else:
-        st.info("Aguardando dados da estação para exibir as condições atuais...")
-    if st.button("Forçar Atualização Manual Agora", key="btn_atualizar_col1"):
-        if atualizar_dados_estacao():
-            st.success("Dados atualizados manualmente!")
-            st.rerun()
+with col_analise:
+    st.subheader("Resultados e Condição")
+    if calcular_btn:
+        # Validação dos inputs antes de passar para o cálculo
+        if not (0 <= temp_bulbo_seco_input <= 50):
+             st.error("Temperatura de Bulbo Seco fora da faixa aceitável (0-50°C).")
+        elif not (0 <= umidade_relativa_input <= 100):
+             st.error("Umidade Relativa fora da faixa aceitável (0-100%).")
         else:
-            st.error("Falha ao atualizar manualmente.")
+            resultado_delta_t, t_w_calculada = calcular_delta_t(temp_bulbo_seco_input, umidade_relativa_input)
+            if isinstance(resultado_delta_t, str): # Se for mensagem de erro
+                st.error(resultado_delta_t)
+                st.metric(label="Temperatura Bulbo Úmido", value="- °C")
+                st.metric(label="Delta T", value="- °C")
+                st.markdown("**Condição para Pulverização:** -")
+            elif t_w_calculada is not None:
+                st.metric(label="Temp. Bulbo Úmido (Tw)", value=f"{t_w_calculada:.2f} °C")
+                st.metric(label="Delta T (Tbs - Tw)", value=f"{resultado_delta_t:.2f} °C", delta_color="off")
 
-with col_grafico_delta_t:
-    st.subheader("Gráfico Delta T")
-    imagem_para_exibir = st.session_state.get('imagem_grafico_atual') or imagem_base_pil
-                         
-    if imagem_para_exibir:
-        caption_text = "Gráfico de referência Delta T"
-        if st.session_state.get('dados_atuais') and 'timestamp' in st.session_state.dados_atuais:
-            try:
-                ts_obj = datetime.fromisoformat(st.session_state.dados_atuais['timestamp'])
-                caption_text = f"Ponto indicativo para dados de: {ts_obj.strftime('%d/%m/%Y %H:%M:%S')}"
-            except: caption_text = f"Ponto indicativo para dados de: {st.session_state.dados_atuais['timestamp']}"
-        st.image(imagem_para_exibir, caption=caption_text, use_container_width=True)
+                condicao_texto = ""
+                cor_condicao = "gray"
+                if resultado_delta_t < 2:
+                    condicao_texto = "🔴 INADEQUADA (Delta T < 2): Alto risco de deriva/escorrimento."
+                    cor_condicao = "red"
+                elif resultado_delta_t > 10: # O site de referência pode usar limites diferentes (ex: >8 ou >12)
+                    condicao_texto = "🟠 ARRISCADA (Delta T > 10): Risco de evaporação excessiva."
+                    cor_condicao = "orange"
+                elif 2 <= resultado_delta_t <= 8: # Faixa ideal comum
+                    condicao_texto = "🟢 ADEQUADA (Delta T 2-8): Condições ideais."
+                    cor_condicao = "green"
+                else: # Entre 8 e 10 (ou o limite superior que você definir)
+                    condicao_texto = f"🟡 ATENÇÃO (Delta T {resultado_delta_t:.1f}): Condição limite."
+                    cor_condicao = "yellow"
+
+                st.markdown(f"**Condição para Pulverização:** <span style='color:{cor_condicao}; font-weight:bold;'>{condicao_texto}</span>", unsafe_allow_html=True)
+            else:
+                st.error("Ocorreu um erro desconhecido no cálculo.")
+    else:
+        st.info("Insira os dados e clique em 'Analisar Condições'.")
+        st.metric(label="Temp. Bulbo Úmido (Tw)", value="- °C")
+        st.metric(label="Delta T (Tbs - Tw)", value="- °C")
+        st.markdown("**Condição para Pulverização:** -")
+
+with col_grafico_dinamico:
+    st.subheader("Visualização no Gráfico Delta T")
+    if imagem_base_pil:
+        if calcular_btn and 'resultado_delta_t' in locals() and not isinstance(resultado_delta_t, str):
+             # Apenas desenha se o cálculo foi bem sucedido
+            img_com_linhas = desenhar_linhas_no_grafico(imagem_base_pil, temp_bulbo_seco_input, umidade_relativa_input)
+            st.image(img_com_linhas, caption=f"Ponto atual: {temp_bulbo_seco_input}°C, {umidade_relativa_input}% RH", use_column_width=True)
+        else:
+            # Mostra o gráfico base se não clicou ou se houve erro no cálculo
+            st.image(imagem_base_pil, caption="Gráfico de referência Delta T", use_column_width=True)
     else:
         st.warning("Imagem base do gráfico não disponível.")
 
 st.markdown("---")
-st.subheader("Histórico de Dados da Estação (Últimos Registros)")
-historico = carregar_historico_do_firestore_simulado()
-if historico:
-    import pandas as pd
-    df_historico = pd.DataFrame(historico)
-    if not df_historico.empty and 'timestamp' in df_historico.columns:
-        try:
-            df_historico['timestamp_dt'] = pd.to_datetime(df_historico['timestamp'])
-            df_historico = df_historico.sort_values(by='timestamp_dt', ascending=False)
-            colunas_para_exibir = ['timestamp_dt', 'temperature_c', 'humidity_percent', 'delta_t_c', 'condition_text', 'wind_speed_kmh', 'pressure_hpa']
-            colunas_presentes = [col for col in colunas_para_exibir if col in df_historico.columns]
-            df_display = df_historico[colunas_presentes].head(10)
-            novos_nomes_colunas = {
-                'timestamp_dt': "Data/Hora", 'temperature_c': "Temp. Ar (°C)",
-                'humidity_percent': "Umid. Rel. (%)", 'delta_t_c': "Delta T (°C)",
-                'condition_text': "Condição Delta T", 'wind_speed_kmh': "Vento (km/h)",
-                'pressure_hpa': "Pressão (hPa)"}
-            df_display = df_display.rename(columns=novos_nomes_colunas)
-            if "Data/Hora" in df_display.columns:
-                 df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-        except Exception as e_pd:
-            print(f"Erro ao processar DataFrame do histórico: {e_pd}")
-            st.error("Erro ao formatar histórico para exibição.")
-    if not df_historico.empty and 'timestamp_dt' in df_historico.columns and len(df_historico) > 1 :
-        st.subheader("Tendências Recentes")
-        try:
-            df_chart = df_historico.set_index('timestamp_dt').sort_index()
-            colunas_numericas_chart = ['temperature_c', 'humidity_percent', 'delta_t_c', 'wind_speed_kmh']
-            colunas_presentes_chart = [col for col in colunas_numericas_chart if col in df_chart.columns]
-            if colunas_presentes_chart:
-                 st.line_chart(df_chart[colunas_presentes_chart])
-            else: st.warning("Sem dados suficientes para gráfico de tendências.")
-        except Exception as e_chart:
-            print(f"Erro ao gerar gráfico de linha do histórico: {e_chart}")
-            st.warning("Não foi possível gerar o gráfico de tendências.")
-else:
-    st.info("Nenhum histórico de dados encontrado.")
-
-st.markdown("---")
 st.markdown("""
-**Notas:**
-- Este aplicativo tenta buscar dados (simulados) de uma estação Ecowitt a cada 5 minutos.
-- **Para uso real, substitua a função `buscar_dados_ecowitt_simulado()` pela sua integração com a API da sua estação Ecowitt.**
-- O histórico é armazenado (simulado) e exibido. Para persistência real, integre com um banco de dados.
-- As coordenadas de pixel para o gráfico são baseadas nas suas especificações.
+**Sobre os Cálculos:**
+- **Temperatura de Bulbo Úmido ($T_w$)**: Estimada pela fórmula de Stull. É a menor temperatura para a qual o ar pode ser resfriado por evaporação de água, a pressão constante.
+- **Delta T ($\Delta T$)**: Diferença entre a Temperatura de Bulbo Seco ($T_{bs}$) e a Temperatura de Bulbo Úmido ($T_w$). É um indicador crucial das condições de evaporação para pulverização agrícola.
 """)
+st.latex(r''' \Delta T = T_{bs} - T_w ''')
