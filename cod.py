@@ -295,11 +295,11 @@ with col_dados_estacao:
         desc_condicao_atual = dados.get('condition_description', 'Aguardando dados...')
         cor_fundo_condicao = "lightgray"; cor_texto_condicao = "black"
         # Hex colors are solid (0% transparency)
-        if condicao_atual_texto == "INADEQUADA": cor_fundo_condicao = "#FFA500"; cor_texto_condicao = "#D8000C" # Light Red
-        elif condicao_atual_texto == "ARRISCADA": cor_fundo_condicao = "#FF0000"; cor_texto_condicao = "#B08D00" # Light Yellow/Orange
-        elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#00EE00"; cor_texto_condicao = "#155724" # Light Green
-        elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#A76800" # Light Orange
-        elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#721C24" # Light Pink/Red
+        if condicao_atual_texto == "INADEQUADA": cor_fundo_condicao = "#FFA500"; cor_texto_condicao = "#FFFFFF" # Light Red
+        elif condicao_atual_texto == "ARRISCADA": cor_fundo_condicao = "#FF0000"; cor_texto_condicao = "#FFFFFF" # Light Yellow/Orange
+        elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#00EE00"; cor_texto_condicao = "#FFFFFF" # Light Green
+        elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#FFFFFF" # Light Orange
+        elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#FFFFFF" # Light Pink/Red
 
 
         delta_t_val_num = dados.get('delta_t_c', None)
