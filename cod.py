@@ -1,10 +1,70 @@
 import streamlit as st
 import math
-import requests
 from PIL import Image, ImageDraw
+import requests
 from io import BytesIO
 
-# --- SUAS FUNÇÕES DE CÁLCULO (sem alteração) ---
+# --- Funções de Manipulação de Imagem ---
+def carregar_imagem_de_url(url):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content))
+        return img
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro de rede ao carregar imagem de {url}: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Erro ao abrir imagem de {url}: {e}")
+        return None
+
+def mapear_valor(valor, de_min, de_max, para_min, para_max):
+    """Mapeia um valor de uma faixa para outra (interpolação linear)."""
+    valor_clamped = max(de_min, min(valor, de_max))
+    if (de_max - de_min) == 0:
+        return para_min
+    return (valor_clamped - de_min) * (para_max - para_min) / (de_max - de_min) + para_min
+
+def sobrepor_alvo_no_grafico(img_grafico_base, img_alvo_url, temp_para_plotar, umidade_para_plotar, params_grafico):
+    if img_grafico_base is None:
+        st.error("Erro: img_grafico_base é None em sobrepor_alvo_no_grafico.")
+        return None
+
+    img_alvo = carregar_imagem_de_url(img_alvo_url)
+    if img_alvo is None:
+        st.warning("Não foi possível carregar a imagem do alvo. Exibindo gráfico base.")
+        return img_grafico_base.copy()
+
+    tamanho_alvo = (40, 40) # Ajuste o tamanho do alvo conforme necessário
+    try:
+        img_alvo = img_alvo.resize(tamanho_alvo, Image.Resampling.LANCZOS)
+    except Exception as e:
+        st.error(f"Erro ao redimensionar imagem do alvo: {e}")
+        return img_grafico_base.copy()
+
+    coord_x = mapear_valor(
+        temp_para_plotar,
+        params_grafico["temp_min_dado_eixo_x"], params_grafico["temp_max_dado_eixo_x"],
+        params_grafico["temp_pixel_min_eixo_x"], params_grafico["temp_pixel_max_eixo_x"]
+    )
+    coord_y = mapear_valor(
+        umidade_para_plotar,
+        params_grafico["umidade_min_dado_eixo_y"], params_grafico["umidade_max_dado_eixo_y"],
+        params_grafico["umidade_pixel_para_min_dado_eixo_y"], params_grafico["umidade_pixel_para_max_dado_eixo_y"]
+    )
+
+    pos_x_paste = int(coord_x - img_alvo.width / 2)
+    pos_y_paste = int(coord_y - img_alvo.height / 2)
+
+    img_com_alvo = img_grafico_base.copy()
+    if img_alvo.mode == 'RGBA':
+        img_com_alvo.paste(img_alvo, (pos_x_paste, pos_y_paste), img_alvo)
+    else:
+        img_com_alvo.paste(img_alvo, (pos_x_paste, pos_y_paste))
+
+    return img_com_alvo
+
+# --- Suas funções de cálculo (exatamente como antes) ---
 def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
     term1_factor = (rh + 8.313659)**0.5
     term1 = t_bs * math.atan(0.151977 * term1_factor)
@@ -19,10 +79,9 @@ def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
 
 def calcular_delta_t(t_bs, rh):
     if not (0 <= rh <= 100):
-        return "Erro: A umidade relativa deve estar entre 0 e 100%.", None
-    # Ajustando a faixa de temperatura de bulbo seco conforme o gráfico e inputs anteriores
-    if not (0 <= t_bs <= 50): # Faixa dos inputs e do gráfico
-        return f"Erro: Temperatura de bulbo seco ({t_bs}°C) fora da faixa esperada (0 a 50°C).", None
+        return "Erro: A umidade relativa (entrada) deve estar entre 0 e 100%.", None
+    if t_bs < -50 or t_bs > 60:
+        return "Erro: Temperatura de bulbo seco (entrada) fora da faixa esperada (-50 a 60°C).", None
     try:
         t_w = calcular_temperatura_bulbo_umido_stull(t_bs, rh)
         delta_t = t_bs - t_w
@@ -30,135 +89,107 @@ def calcular_delta_t(t_bs, rh):
     except Exception as e:
         return f"Erro no cálculo: {e}", None
 
-# --- FUNÇÃO PARA DESENHAR AS LINHAS NA IMAGEM (ajustes nos limites se necessário) ---
-def desenhar_linhas_no_grafico(imagem_base_pil, temp_usuario, rh_usuario):
-    img_com_linhas = imagem_base_pil.copy()
-    draw = ImageDraw.Draw(img_com_linhas)
-
-    # Coordenadas e escalas do gráfico (ajuste fino pode ser necessário)
-    temp_min_grafico = 5.0
-    temp_max_grafico = 45.0 # O gráfico parece ir até 45C
-    pixel_x_min_temp = 115  # Pixel X para temp_min_grafico (estimativa)
-    pixel_x_max_temp = 960  # Pixel X para temp_max_grafico (estimativa)
-
-    rh_min_grafico = 10.0
-    rh_max_grafico = 90.0 # O gráfico mostra linhas de RH até 90%
-    pixel_y_min_rh = 890  # Pixel Y para rh_min_grafico (base do gráfico)
-    pixel_y_max_rh = 100  # Pixel Y para rh_max_grafico (topo das linhas de RH)
-
-    # Verificar se os valores estão dentro da faixa plotável do gráfico
-    # É importante que temp_usuario e rh_usuario estejam dentro dos limites visuais do gráfico
-    # para que as linhas apareçam corretamente.
-    plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
-    plotar_rh = max(rh_min_grafico, min(rh_usuario, rh_max_grafico))
-
-    percent_temp = (plotar_temp - temp_min_grafico) / (temp_max_grafico - temp_min_grafico)
-    pixel_x_usuario = pixel_x_min_temp + percent_temp * (pixel_x_max_temp - pixel_x_min_temp)
-
-    percent_rh = (plotar_rh - rh_min_grafico) / (rh_max_grafico - rh_min_grafico)
-    pixel_y_usuario = pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)
-
-    # Desenhar linhas
-    draw.line([(pixel_x_usuario, pixel_y_min_rh), (pixel_x_usuario, pixel_y_max_rh)], fill="blue", width=4)
-    draw.line([(pixel_x_min_temp, pixel_y_usuario), (pixel_x_max_temp, pixel_y_usuario)], fill="blue", width=4)
-
-    raio_circulo = 8
-    draw.ellipse([(pixel_x_usuario - raio_circulo, pixel_y_usuario - raio_circulo),
-                  (pixel_x_usuario + raio_circulo, pixel_y_usuario + raio_circulo)],
-                 fill="red", outline="black", width=2)
-    return img_com_linhas
-
 # --- Interface Streamlit ---
-st.set_page_config(page_title="Análise Delta T para Pulverização", layout="wide")
-st.title("💧 Análise Delta T e Condições para Pulverização")
-st.caption(f"Última atualização dos dados da calculadora: {math.pi:.2f} (exemplo, poderia ser uma data/hora real)") # Exemplo de timestamp
+st.set_page_config(page_title="Calculadora Delta T", layout="wide")
+st.title("💧 Calculadora de Delta T para Pulverização")
+st.caption("Baseada na fórmula de Stull. O ícone do alvo no gráfico indica a condição de entrada.")
 
-url_grafico_base = "https://d335luupugsy2.cloudfront.net/images%2Flanding_page%2F2083383%2F16.png"
-imagem_base_pil = None
-try:
-    response = requests.get(url_grafico_base)
-    response.raise_for_status()
-    imagem_base_pil = Image.open(BytesIO(response.content)).convert("RGBA")
-except requests.exceptions.RequestException as e:
-    st.error(f"Erro ao baixar a imagem base do gráfico: {e}")
+# --- Configuração do Gráfico e Alvo ---
+URL_GRAFICO_BASE = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
+URL_ALVO_EMOJI = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" # URL DO ALVO ORIGINAL
 
-# Layout em três colunas para simular blocos de informação
-col_entrada, col_analise, col_grafico_dinamico = st.columns([1, 1, 1.5]) # Ajuste as proporções
+PARAMETROS_GRAFICO = {
+    "temp_min_dado_eixo_x": 0.0,
+    "temp_max_dado_eixo_x": 50.0,
+    "temp_pixel_min_eixo_x": 443,
+    "temp_pixel_max_eixo_x": 1965,
+    "umidade_min_dado_eixo_y": 10.0,
+    "umidade_max_dado_eixo_y": 100.0,
+    "umidade_pixel_para_min_dado_eixo_y": 1450,
+    "umidade_pixel_para_max_dado_eixo_y": 242,
+}
+
+@st.cache_data
+def carregar_grafico_base_cache(url):
+    return carregar_imagem_de_url(url)
+
+img_grafico_base_original = carregar_grafico_base_cache(URL_GRAFICO_BASE)
+
+col_entrada, col_resultados = st.columns(2)
 
 with col_entrada:
-    st.subheader("Parâmetros Atuais")
+    st.header("Entrada de Dados")
     temp_bulbo_seco_input = st.number_input(
         "Temperatura de Bulbo Seco (°C):",
-        min_value=0.0, max_value=50.0, value=25.0, step=0.1, format="%.1f",
-        help="Temperatura atual do ar medida por um termômetro de bulbo seco."
+        min_value=PARAMETROS_GRAFICO["temp_min_dado_eixo_x"],
+        max_value=PARAMETROS_GRAFICO["temp_max_dado_eixo_x"],
+        value=25.0, step=0.1, format="%.1f",
+        help=f"Valores entre {PARAMETROS_GRAFICO['temp_min_dado_eixo_x']}°C e {PARAMETROS_GRAFICO['temp_max_dado_eixo_x']}°C."
     )
     umidade_relativa_input = st.number_input(
         "Umidade Relativa (%):",
-        min_value=0.0, max_value=100.0, value=60.0, step=0.1, format="%.1f",
-        help="Percentual de umidade no ar em relação ao máximo que poderia conter naquela temperatura."
+        min_value=PARAMETROS_GRAFICO["umidade_min_dado_eixo_y"],
+        max_value=PARAMETROS_GRAFICO["umidade_max_dado_eixo_y"],
+        value=60.0, step=0.1, format="%.1f",
+        help=f"Valores entre {PARAMETROS_GRAFICO['umidade_min_dado_eixo_y']}% e {PARAMETROS_GRAFICO['umidade_max_dado_eixo_y']}%."
     )
-    calcular_btn = st.button("Analisar Condições", type="primary", use_container_width=True)
+    calcular_btn = st.button("Calcular Delta T e Mostrar no Gráfico", type="primary")
 
-with col_analise:
-    st.subheader("Resultados e Condição")
+with col_resultados:
+    st.header("Resultados e Gráfico")
     if calcular_btn:
-        # Validação dos inputs antes de passar para o cálculo
-        if not (0 <= temp_bulbo_seco_input <= 50):
-             st.error("Temperatura de Bulbo Seco fora da faixa aceitável (0-50°C).")
-        elif not (0 <= umidade_relativa_input <= 100):
-             st.error("Umidade Relativa fora da faixa aceitável (0-100%).")
-        else:
-            resultado_delta_t, t_w_calculada = calcular_delta_t(temp_bulbo_seco_input, umidade_relativa_input)
-            if isinstance(resultado_delta_t, str): # Se for mensagem de erro
-                st.error(resultado_delta_t)
-                st.metric(label="Temperatura Bulbo Úmido", value="- °C")
-                st.metric(label="Delta T", value="- °C")
-                st.markdown("**Condição para Pulverização:** -")
-            elif t_w_calculada is not None:
-                st.metric(label="Temp. Bulbo Úmido (Tw)", value=f"{t_w_calculada:.2f} °C")
-                st.metric(label="Delta T (Tbs - Tw)", value=f"{resultado_delta_t:.2f} °C", delta_color="off")
+        resultado_delta_t, t_w_calculada = calcular_delta_t(temp_bulbo_seco_input, umidade_relativa_input)
 
-                condicao_texto = ""
-                cor_condicao = "gray"
-                if resultado_delta_t < 2:
-                    condicao_texto = "🔴 INADEQUADA (Delta T < 2): Alto risco de deriva/escorrimento."
-                    cor_condicao = "red"
-                elif resultado_delta_t > 10: # O site de referência pode usar limites diferentes (ex: >8 ou >12)
-                    condicao_texto = "🟠 ARRISCADA (Delta T > 10): Risco de evaporação excessiva."
-                    cor_condicao = "orange"
-                elif 2 <= resultado_delta_t <= 8: # Faixa ideal comum
-                    condicao_texto = "🟢 ADEQUADA (Delta T 2-8): Condições ideais."
-                    cor_condicao = "green"
-                else: # Entre 8 e 10 (ou o limite superior que você definir)
-                    condicao_texto = f"🟡 ATENÇÃO (Delta T {resultado_delta_t:.1f}): Condição limite."
-                    cor_condicao = "yellow"
-
-                st.markdown(f"**Condição para Pulverização:** <span style='color:{cor_condicao}; font-weight:bold;'>{condicao_texto}</span>", unsafe_allow_html=True)
+        if isinstance(resultado_delta_t, str):
+            st.error(resultado_delta_t)
+            st.metric(label="Temperatura Bulbo Úmido", value="- °C")
+            st.metric(label="Delta T", value="- °C")
+            st.info("Condição: -")
+            if img_grafico_base_original:
+                st.image(img_grafico_base_original, caption="Gráfico de Referência", use_column_width=True)
             else:
-                st.error("Ocorreu um erro desconhecido no cálculo.")
-    else:
-        st.info("Insira os dados e clique em 'Analisar Condições'.")
-        st.metric(label="Temp. Bulbo Úmido (Tw)", value="- °C")
-        st.metric(label="Delta T (Tbs - Tw)", value="- °C")
-        st.markdown("**Condição para Pulverização:** -")
+                st.warning("Não foi possível carregar a imagem do gráfico de referência.")
+        elif t_w_calculada is not None:
+            st.metric(label="Temperatura Bulbo Úmido", value=f"{t_w_calculada:.2f} °C")
+            st.metric(label="Delta T", value=f"{resultado_delta_t:.2f} °C", delta_color="off")
 
-with col_grafico_dinamico:
-    st.subheader("Visualização no Gráfico Delta T")
-    if imagem_base_pil:
-        if calcular_btn and 'resultado_delta_t' in locals() and not isinstance(resultado_delta_t, str):
-             # Apenas desenha se o cálculo foi bem sucedido
-            img_com_linhas = desenhar_linhas_no_grafico(imagem_base_pil, temp_bulbo_seco_input, umidade_relativa_input)
-            st.image(img_com_linhas, caption=f"Ponto atual: {temp_bulbo_seco_input}°C, {umidade_relativa_input}% RH", use_column_width=True)
+            st.subheader("Interpretação do Delta T (Condições de Pulverização):")
+            if resultado_delta_t < 2:
+                st.warning("🔴 Delta T < 2°C: NÃO RECOMENDADO. Alto risco de deriva por escorrimento ou inversão térmica.")
+            elif 2 <= resultado_delta_t <= 8:
+                st.success(f"🟢 Delta T entre 2-8°C ({resultado_delta_t:.1f}°C): IDEAL. Boas condições de pulverização.")
+            elif 8 < resultado_delta_t <= 10:
+                 st.info(f"🟡 Delta T entre 8-10°C ({resultado_delta_t:.1f}°C): ATENÇÃO. Evaporação moderada, monitore.")
+            else:
+                st.error(f"🟠 Delta T > 10°C ({resultado_delta_t:.1f}°C): NÃO RECOMENDADO. Alto risco de deriva por evaporação excessiva das gotas.")
+
+            if img_grafico_base_original:
+                imagem_com_alvo = sobrepor_alvo_no_grafico(
+                    img_grafico_base_original,
+                    URL_ALVO_EMOJI,
+                    temp_bulbo_seco_input,
+                    umidade_relativa_input,
+                    PARAMETROS_GRAFICO
+                )
+                if imagem_com_alvo:
+                    st.image(imagem_com_alvo, caption=f"Ponto no Gráfico: Temp={temp_bulbo_seco_input}°C, UR={umidade_relativa_input}%", use_column_width=True)
+            else:
+                st.warning("Não foi possível carregar a imagem base do gráfico para plotar o alvo.")
         else:
-            # Mostra o gráfico base se não clicou ou se houve erro no cálculo
-            st.image(imagem_base_pil, caption="Gráfico de referência Delta T", use_column_width=True)
+            st.error("Ocorreu um erro desconhecido no cálculo.")
+            if img_grafico_base_original:
+                st.image(img_grafico_base_original, caption="Gráfico de Referência", use_column_width=True)
     else:
-        st.warning("Imagem base do gráfico não disponível.")
+        st.info("Ajuste os valores à esquerda e clique no botão para calcular e ver o ponto no gráfico.")
+        st.metric(label="Temperatura Bulbo Úmido", value="- °C")
+        st.metric(label="Delta T", value="- °C")
+        st.info("Condição: -")
+        if img_grafico_base_original:
+            st.image(img_grafico_base_original, caption="Gráfico de Referência (Aguardando cálculo)", use_column_width=True)
+        else:
+            st.warning("Não foi possível carregar a imagem do gráfico de referência.")
 
 st.markdown("---")
-st.markdown("""
-**Sobre os Cálculos:**
-- **Temperatura de Bulbo Úmido ($T_w$)**: Estimada pela fórmula de Stull. É a menor temperatura para a qual o ar pode ser resfriado por evaporação de água, a pressão constante.
-- **Delta T ($\Delta T$)**: Diferença entre a Temperatura de Bulbo Seco ($T_{bs}$) e a Temperatura de Bulbo Úmido ($T_w$). É um indicador crucial das condições de evaporação para pulverização agrícola.
-""")
+st.markdown("A **Temperatura de Bulbo Úmido ($T_w$)** é a menor temperatura para a qual o ar pode ser resfriado por evaporação de água nele, a pressão constante. A fórmula de Stull é uma aproximação empírica.")
+st.markdown("O **Delta T ($\Delta T$)** é a diferença entre a Temperatura de Bulbo Seco ($T_{bs}$) e a Temperatura de Bulbo Úmido ($T_w$). É um indicador das condições de evaporação e da adequação para pulverização agrícola.")
 st.latex(r''' \Delta T = T_{bs} - T_w ''')
