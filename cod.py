@@ -9,6 +9,18 @@ import random # Para simular dados da Ecowitt
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox # For icons on plot
+
+# --- Color Palette (New) ---
+COLOR_ADEQUADA = '#4CAF50'  # Green (from image reference)
+COLOR_ARRISCADA = '#FFEB3B' # Bright Yellow
+COLOR_INADEQUADA = '#F44336'# Bright Red
+COLOR_ERRO = '#F8D7DA'
+TEXT_ON_ADEQUADA = 'white'
+TEXT_ON_ARRISCADA = '#424242' # Dark Grey
+TEXT_ON_INADEQUADA = 'white'
+TEXT_ON_ERRO = '#721C24'
+
 
 # --- Simulação do Firestore (substitua pela integração real) ---
 if 'db_historico' not in st.session_state:
@@ -52,30 +64,29 @@ def calcular_delta_t_e_condicao(t_bs, rh):
 
         condicao_texto = "-"
         descricao_condicao = ""
-        # NOVAS CONDIÇÕES E DESCRIÇÕES PARA DELTA T
         if delta_t < 2:
             condicao_texto = "ARRISCADA"
             descricao_condicao = "Risco elevado de deriva e escorrimento (Delta T < 2°C)."
-        elif delta_t > 10: # Prioridade maior que a faixa 8-10
+        elif delta_t > 10:
             condicao_texto = "INADEQUADA"
             descricao_condicao = "Risco crítico de evaporação das gotas (Delta T > 10°C)."
         elif 2 <= delta_t <= 8:
             condicao_texto = "ADEQUADA"
             descricao_condicao = "Condições ideais para pulverização (2°C ≤ Delta T ≤ 8°C)."
-        elif 8 < delta_t <= 10: # Esta condição vem depois de >10 e <2
+        elif 8 < delta_t <= 10:
             condicao_texto = "ARRISCADA"
             descricao_condicao = f"Condição limite (Delta T {delta_t:.1f}°C). Risco de evaporação."
-        else: # Caso algo inesperado
-            condicao_texto = "VERIFICAR"
-            descricao_condicao = f"Valor de Delta T ({delta_t:.1f}°C) requer atenção."
+        else: # Caso algo inesperado, ou se delta_t for None (embora try/except deva pegar isso)
+            condicao_texto = "VERIFICAR" # Should not happen if delta_t is a valid number
+            descricao_condicao = f"Valor de Delta T ({delta_t:.1f}°C) requer verificação."
 
 
         return t_w, delta_t, condicao_texto, descricao_condicao, ponto_orvalho, sensacao_termica
     except Exception as e:
         return None, None, f"Erro no cálculo: {e}", None, None, None
 
-@st.cache_data(ttl=600) # Cache do ícone
-def carregar_icone(url_icone):
+@st.cache_data(ttl=3600)
+def carregar_icone_pil(url_icone):
     try:
         response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         response_icone.raise_for_status()
@@ -84,12 +95,11 @@ def carregar_icone(url_icone):
                 content_type_icone.startswith('image/jpeg') or \
                 content_type_icone.startswith('image/gif') or \
                 content_type_icone.startswith('image/webp')):
-            st.warning(f"URL do ícone não é imagem (Content-Type: {content_type_icone}).")
+            st.warning(f"URL do ícone não é imagem (Content-Type: {content_type_icone}). Ícone: {url_icone}")
             return None
         return Image.open(BytesIO(response_icone.content)).convert("RGBA")
     except Exception as e:
-        print(f"Erro ao carregar ícone: {e}")
-        st.warning(f"Não foi possível carregar o ícone de {url_icone}.")
+        print(f"Erro ao carregar ícone PIL: {e} para URL: {url_icone}")
         return None
 
 # --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS E HISTÓRICO) ---
@@ -97,74 +107,46 @@ def desenhar_grafico_com_pontos_e_linhas(imagem_base_pil, pontos_historico, url_
     if imagem_base_pil is None: return None
     img_processada = imagem_base_pil.copy()
     draw = ImageDraw.Draw(img_processada)
-    icone_alvo_pil = carregar_icone(url_icone_alvo)
+    icone_alvo_pil = carregar_icone_pil(url_icone_alvo)
 
     temp_min_grafico, temp_max_grafico = 0.0, 50.0
     pixel_x_min_temp, pixel_x_max_temp = 198, 880
     rh_min_grafico, rh_max_grafico = 10.0, 100.0
-    pixel_y_min_rh, pixel_y_max_rh = 650, 108 # Y_min_rh (para 10%) é pixel maior, Y_max_rh (para 100%) é pixel menor
+    pixel_y_min_rh, pixel_y_max_rh = 650, 108
 
     coordenadas_pixels_historico = []
-
-    todos_os_pontos_para_plotar = list(pontos_historico) # Copia para não modificar a original
+    todos_os_pontos_para_plotar = list(pontos_historico)
     if temp_atual is not None and rh_atual is not None:
-         # Adiciona o ponto atual ao final para ser o último desenhado e conectado
         todos_os_pontos_para_plotar.append({'temperature_c': temp_atual, 'humidity_percent': rh_atual, 'atual': True})
 
     for ponto_data in todos_os_pontos_para_plotar:
         temp_ponto = ponto_data.get('temperature_c')
         rh_ponto = ponto_data.get('humidity_percent')
-
         if temp_ponto is not None and rh_ponto is not None:
             plotar_temp = max(temp_min_grafico, min(temp_ponto, temp_max_grafico))
             plotar_rh = max(rh_min_grafico, min(rh_ponto, rh_max_grafico))
-
             range_temp_grafico = temp_max_grafico - temp_min_grafico
             percent_temp = (plotar_temp - temp_min_grafico) / range_temp_grafico if range_temp_grafico != 0 else 0
             pixel_x = int(pixel_x_min_temp + percent_temp * (pixel_x_max_temp - pixel_x_min_temp))
-
             range_rh_grafico = rh_max_grafico - rh_min_grafico
             percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
             pixel_y = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
-            
             coordenadas_pixels_historico.append({'x': pixel_x, 'y': pixel_y, 'atual': ponto_data.get('atual', False)})
 
-    # Desenhar linhas conectando os pontos históricos
     for i in range(1, len(coordenadas_pixels_historico)):
         p_anterior = coordenadas_pixels_historico[i-1]
         p_atual_coord = coordenadas_pixels_historico[i]
-        draw.line([(p_anterior['x'], p_anterior['y']), (p_atual_coord['x'], p_atual_coord['y'])], fill="rgba(0,0,255,100)", width=2) # Linha azul semi-transparente
+        draw.line([(p_anterior['x'], p_anterior['y']), (p_atual_coord['x'], p_atual_coord['y'])], fill="rgba(0,0,255,100)", width=2)
 
-    # Desenhar ícones nos pontos
     if icone_alvo_pil:
-        tamanho_icone_base = 30 # Reduzido para não poluir muito
-        novo_tamanho_icone = int(tamanho_icone_base * 1.0) # Ajuste o tamanho se necessário
-        tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone)
+        tamanho_icone_base = 30 # Tamanho para o gráfico principal
+        tamanho_icone = (tamanho_icone_base, tamanho_icone_base)
         icone_redimensionado = icone_alvo_pil.resize(tamanho_icone, Image.Resampling.LANCZOS)
-
-        for i, coord_pixel in enumerate(coordenadas_pixels_historico):
+        for coord_pixel in coordenadas_pixels_historico:
             pos_x_icone = coord_pixel['x'] - tamanho_icone[0] // 2
             pos_y_icone = coord_pixel['y'] - tamanho_icone[1] // 2
-            
-            # Destacar o ponto atual (opcional, pode ser com cor de linha diferente ou ícone maior)
-            # if coord_pixel.get('atual', False):
-            #     # Poderia usar um ícone diferente ou desenhar um círculo maior ao redor
-            #     draw.ellipse([(coord_pixel['x'] - 10, coord_pixel['y'] - 10),
-            #                   (coord_pixel['x'] + 10, coord_pixel['y'] + 10)],
-            #                  outline="blue", width=2)
-            
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
-            
-            # Adicionar um pequeno número para indicar a ordem (opcional)
-            # try:
-            #     font = ImageFont.truetype("arial.ttf", 10) # Requer fonte instalada
-            # except IOError:
-            #     font = ImageFont.load_default()
-            # draw.text((pos_x_icone + tamanho_icone[0], pos_y_icone), str(i+1), fill="black", font=font)
-
-
     return img_processada
-
 
 # --- LÓGICA DA APLICAÇÃO STREAMLIT ---
 st.set_page_config(page_title="Estação Meteorológica - BASE AGRO", layout="wide")
@@ -177,7 +159,7 @@ if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafi
 url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
 url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
-MAX_PONTOS_GRAFICO_PRINCIPAL = 10 # Número de pontos históricos no gráfico principal
+MAX_PONTOS_GRAFICO_PRINCIPAL = 10
 
 @st.cache_data(ttl=3600)
 def carregar_imagem_base(url):
@@ -194,10 +176,13 @@ imagem_base_pil = carregar_imagem_base(url_grafico_base)
 if imagem_base_pil is None:
     st.error("A imagem de fundo do gráfico não pôde ser carregada. O aplicativo pode não funcionar corretamente.")
 
+icone_alvo_para_matplotlib = carregar_icone_pil(url_icone_localizacao)
+
+
 def buscar_dados_ecowitt_simulado():
-    time.sleep(0.2) # Reduzido para testes mais rápidos
-    temp = round(random.uniform(15, 35), 1) # Faixa mais comum para teste
-    umid = round(random.uniform(30, 90), 1) # Faixa mais comum
+    time.sleep(0.2)
+    temp = round(random.uniform(10, 40), 1)
+    umid = round(random.uniform(20, 95), 1)
     vento_vel = round(random.uniform(0, 20), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
@@ -207,7 +192,6 @@ def buscar_dados_ecowitt_simulado():
         "temperature_c": temp, "humidity_percent": umid,
         "wind_speed_kmh": vento_vel, "wind_gust_kmh": vento_raj,
         "pressure_hpa": pressao, "wind_direction": vento_dir,
-        # Adicionando outros campos que podem estar faltando para consistência
         "altitude_m": 314, "uv_index": random.randint(0,11),
         "luminosity_lux": random.randint(1000, 80000), "solar_radiation_wm2": random.randint(50,900)
     }
@@ -219,7 +203,7 @@ def atualizar_dados_estacao():
         umid_rel = dados_ecowitt["humidity_percent"]
         t_w, delta_t, condicao, desc_condicao, ponto_orvalho, sensacao_termica = calcular_delta_t_e_condicao(temp_ar, umid_rel)
 
-        if delta_t is not None: # Checar se delta_t foi calculado (não None)
+        if delta_t is not None: # Checa se delta_t foi calculado (não None)
             dados_para_salvar = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
                 "humidity_percent": umid_rel,
@@ -234,35 +218,23 @@ def atualizar_dados_estacao():
             st.session_state.dados_atuais = dados_para_salvar
 
             if imagem_base_pil:
-                historico_recente_para_grafico = carregar_historico_do_firestore_simulado()
-                # Pegar os últimos N pontos, mas o mais recente é o 'dados_atuais', não incluído ainda no histórico_recente se for a primeira vez
-                # A função desenhar_grafico_com_pontos_e_linhas agora recebe o ponto atual separadamente ou como parte da lista
-                
-                pontos_plot = sorted(st.session_state.db_historico, key=lambda x: x['timestamp'], reverse=False) # Do mais antigo ao mais novo
-                pontos_plot = pontos_plot[-(MAX_PONTOS_GRAFICO_PRINCIPAL-1):] # Pega os N-1 mais recentes (sem o atual)
-                
-                # O ponto atual é o último.
+                pontos_plot_main_graph = sorted(st.session_state.db_historico, key=lambda x: x['timestamp'], reverse=False)
+                pontos_plot_main_graph = pontos_plot_main_graph[-(MAX_PONTOS_GRAFICO_PRINCIPAL-1):]
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_pontos_e_linhas(
-                    imagem_base_pil,
-                    pontos_plot, # Passa a lista de históricos (sem o atual ainda)
-                    url_icone_localizacao,
-                    temp_ar, # Passa o atual explicitamente
-                    umid_rel
+                    imagem_base_pil, pontos_plot_main_graph, url_icone_localizacao, temp_ar, umid_rel
                 )
             st.session_state.last_update_time = datetime.now()
             return True
-        else:
-            st.error(f"Erro no cálculo Delta T: {condicao}") # condicao aqui é a msg de erro
-            # Salvar dados mesmo com erro de cálculo para histórico
+        else: # Erro no cálculo, condicao contém a mensagem de erro
+            st.error(f"Erro no cálculo Delta T: {condicao}")
             dados_erro = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
                 "humidity_percent": umid_rel, "wet_bulb_c": None, "delta_t_c": None,
                 "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
             }
-            salvar_dados_no_firestore_simulado(dados_erro) # Salva o erro
+            salvar_dados_no_firestore_simulado(dados_erro)
             st.session_state.dados_atuais = dados_erro
-            # Tenta desenhar apenas o ponto atual no gráfico se houver erro
-            if imagem_base_pil:
+            if imagem_base_pil: # Tenta desenhar o ponto atual mesmo com erro de cálculo Delta T
                  st.session_state.imagem_grafico_atual = desenhar_grafico_com_pontos_e_linhas(
                     imagem_base_pil, [], url_icone_localizacao, temp_ar, umid_rel
                 )
@@ -279,14 +251,12 @@ if st.session_state.last_update_time == datetime.min or \
     if atualizar_dados_estacao():
         if 'running_first_time' not in st.session_state:
             st.session_state.running_first_time = True
-            st.rerun() # Rerun para mostrar o primeiro ponto
-    # else: # Não precisa de st.rerun em caso de falha na atualização automática
-
+            st.rerun()
 
 st.caption(f"Última atualização dos dados: {st.session_state.last_update_time.strftime('%d/%m/%Y %H:%M:%S') if st.session_state.last_update_time > datetime.min else 'Aguardando primeira atualização...'}")
 st.markdown("---")
 
-col_dados_estacao, col_grafico_delta_t = st.columns([1.2, 1.5]) # Ajuste conforme necessário
+col_dados_estacao, col_grafico_delta_t = st.columns([1.2, 1.5])
 
 with col_dados_estacao:
     st.subheader("Estação Meteorológica (Dados Atuais)")
@@ -305,12 +275,26 @@ with col_dados_estacao:
         condicao_atual_texto = dados.get('condition_text', '-')
         desc_condicao_atual = dados.get('condition_description', 'Aguardando dados...')
         
-        # NOVAS CORES PARA AS CONDIÇÕES DELTA T
-        cor_fundo_condicao = "lightgray"; cor_texto_condicao = "black"
-        if condicao_atual_texto == "ARRISCADA": cor_fundo_condicao = "#FFC107"; cor_texto_condicao = "#332701" # Amarelo
-        elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#28A745"; cor_texto_condicao = "white" # Verde
-        elif condicao_atual_texto == "INADEQUADA": cor_fundo_condicao = "#DC3545"; cor_texto_condicao = "white" # Vermelho
-        elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#721C24"
+        cor_fundo_condicao = "lightgray" # Cor de fundo padrão
+        cor_texto_condicao = "black"     # Cor de texto padrão
+        cor_valor_delta_t_texto = "#007bff" # Cor padrão para o valor numérico do Delta T
+
+        if condicao_atual_texto == "ARRISCADA":
+            cor_fundo_condicao = COLOR_ARRISCADA
+            cor_texto_condicao = TEXT_ON_ARRISCADA
+            cor_valor_delta_t_texto = COLOR_ARRISCADA # Texto do valor Delta T usa a cor da condição
+        elif condicao_atual_texto == "ADEQUADA":
+            cor_fundo_condicao = COLOR_ADEQUADA
+            cor_texto_condicao = TEXT_ON_ADEQUADA
+            cor_valor_delta_t_texto = COLOR_ADEQUADA
+        elif condicao_atual_texto == "INADEQUADA":
+            cor_fundo_condicao = COLOR_INADEQUADA
+            cor_texto_condicao = TEXT_ON_INADEQUADA
+            cor_valor_delta_t_texto = COLOR_INADEQUADA
+        elif condicao_atual_texto == "ERRO CÁLCULO":
+            cor_fundo_condicao = COLOR_ERRO
+            cor_texto_condicao = TEXT_ON_ERRO
+            # cor_valor_delta_t_texto permanece o default ou pode ser específico para erro
         
         delta_t_val_num = dados.get('delta_t_c', None)
         delta_t_display_val = f"{delta_t_val_num:.2f}" if delta_t_val_num is not None else "-"
@@ -318,7 +302,7 @@ with col_dados_estacao:
         st.markdown(f"""
         <div style='text-align: center; margin-bottom: 10px;'>
             <span style='font-size: 1.1em; font-weight: bold;'>Valor Delta T:</span><br>
-            <span style='font-size: 2.2em; font-weight: bold; color: {cor_fundo_condicao};'>{delta_t_display_val} °C</span>
+            <span style='font-size: 2.2em; font-weight: bold; color: {cor_valor_delta_t_texto};'>{delta_t_display_val} °C</span>
         </div> """, unsafe_allow_html=True)
 
         st.markdown(f"""
@@ -330,24 +314,23 @@ with col_dados_estacao:
         st.markdown("---")
 
         st.markdown("##### 💨 Vento e Pressão")
-        # ... (código do vento e pressão permanece o mesmo)
         col_vento1, col_vento2 = st.columns(2)
         vento_velocidade_atual = dados.get('wind_speed_kmh', 0)
         condicao_vento_texto = "-"
         desc_condicao_vento = ""
-        cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
+        cor_fundo_vento = "lightgray"; cor_texto_vento_cond = "black"
         if vento_velocidade_atual <= 3:
             condicao_vento_texto = "ARRISCADO"
             desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800" # Amarelo claro
+            cor_fundo_vento = "#FFE9C5"; cor_texto_vento_cond = "#A76800"
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724" # Verde claro
+            cor_fundo_vento = "#D4EDDA"; cor_texto_vento_cond = "#155724"
         else:
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
-            cor_fundo_vento = "#FFD2D2"; cor_texto_vento = "#D8000C" # Vermelho claro
+            cor_fundo_vento = "#FFD2D2"; cor_texto_vento_cond = "#D8000C"
         with col_vento1:
             st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
             st.metric(label="Pressão", value=f"{dados.get('pressure_hpa', '-'):.1f} hPa")
@@ -355,13 +338,12 @@ with col_dados_estacao:
             st.metric(label="Rajadas", value=f"{dados.get('wind_gust_kmh', '-'):.1f} km/h")
             st.metric(label="Direção Vento", value=f"{dados.get('wind_direction', '-')}")
         st.markdown(f"""
-        <div style='background-color: {cor_fundo_vento}; color: {cor_texto_vento}; padding: 10px; border-radius: 5px; text-align: center; margin-top: 10px; margin-bottom: 5px;'>
+        <div style='background-color: {cor_fundo_vento}; color: {cor_texto_vento_cond}; padding: 10px; border-radius: 5px; text-align: center; margin-top: 10px; margin-bottom: 5px;'>
             <strong style='font-size: 1.1em;'>Condição do Vento: {condicao_vento_texto}</strong>
         </div>
         <p style='text-align: center; font-size: 0.85em; color: #555;'>{desc_condicao_vento}</p>
         """, unsafe_allow_html=True)
         st.markdown("---")
-
     else:
         st.info("Aguardando dados da estação para exibir as condições atuais...")
 
@@ -381,8 +363,11 @@ with col_grafico_delta_t:
             try:
                 ts_obj = datetime.fromisoformat(st.session_state.dados_atuais['timestamp'])
                 caption_text = f"Ponto mais recente: {ts_obj.strftime('%d/%m/%Y %H:%M:%S')}."
-                if len(st.session_state.get('db_historico',[])) > 1:
-                     caption_text += f" Mostrando os últimos {min(MAX_PONTOS_GRAFICO_PRINCIPAL, len(st.session_state.db_historico))} pontos."
+                num_pontos_db = len(st.session_state.get('db_historico',[]))
+                # Considera o ponto atual ao contar
+                num_pontos_plotados_main = min(MAX_PONTOS_GRAFICO_PRINCIPAL if num_pontos_db > 0 else 0, num_pontos_db)
+                if num_pontos_plotados_main > 0 :
+                     caption_text += f" Mostrando os últimos {num_pontos_plotados_main} pontos."
             except: caption_text = "Gráfico de referência Delta T com histórico."
         st.image(imagem_para_exibir, caption=caption_text, use_container_width=True)
     else:
@@ -397,16 +382,11 @@ if historico_completo:
         try:
             df_historico['timestamp_dt'] = pd.to_datetime(df_historico['timestamp'])
             df_historico = df_historico.sort_values(by='timestamp_dt', ascending=False)
-            
-            # Colunas para exibir no histórico de Delta T
             colunas_delta_t_hist = ['timestamp_dt', 'delta_t_c', 'condition_text']
             colunas_presentes_hist = [col for col in colunas_delta_t_hist if col in df_historico.columns]
-            df_display_hist = df_historico[colunas_presentes_hist].head(10) # Mostrar últimos 10
-            
+            df_display_hist = df_historico[colunas_presentes_hist].head(10)
             novos_nomes_hist = {
-                'timestamp_dt': "Data/Hora",
-                'delta_t_c': "Delta T (°C)",
-                'condition_text': "Condição Delta T"
+                'timestamp_dt': "Data/Hora", 'delta_t_c': "Delta T (°C)", 'condition_text': "Condição Delta T"
             }
             df_display_hist = df_display_hist.rename(columns=novos_nomes_hist)
             if "Data/Hora" in df_display_hist.columns:
@@ -416,52 +396,67 @@ if historico_completo:
             print(f"Erro ao processar DataFrame do histórico Delta T: {e_pd}")
             st.error("Erro ao formatar histórico Delta T para exibição.")
 
-        # GRÁFICO DE TENDÊNCIAS DELTA T COM CORES (MATPLOTLIB)
         if not df_historico.empty and 'timestamp_dt' in df_historico.columns and 'delta_t_c' in df_historico.columns and len(df_historico) > 1:
             st.subheader("Tendência Delta T com Condições")
             try:
                 df_chart = df_historico[['timestamp_dt', 'delta_t_c']].copy()
+                df_chart.dropna(subset=['delta_t_c'], inplace=True) # Importante: remover NaNs
                 df_chart = df_chart.sort_values(by='timestamp_dt', ascending=True).set_index('timestamp_dt')
-                df_chart.dropna(subset=['delta_t_c'], inplace=True) # Remover NaNs em delta_t_c
 
                 if len(df_chart) > 1:
-                    fig, ax = plt.subplots(figsize=(10, 4)) # Ajuste o tamanho se necessário
+                    fig, ax = plt.subplots(figsize=(12, 5))
                     
-                    for i in range(len(df_chart) - 1):
-                        y1 = df_chart['delta_t_c'].iloc[i]
-                        y2 = df_chart['delta_t_c'].iloc[i+1]
-                        x1 = df_chart.index[i]
-                        x2 = df_chart.index[i+1]
-                        
-                        # Usar o valor inicial do segmento para determinar a cor
-                        delta_t_val = y1 
-                        color = 'gray' # Cor padrão
-                        if delta_t_val < 2: color = '#FFC107'  # Amarelo
-                        elif delta_t_val > 10: color = '#DC3545' # Vermelho
-                        elif 2 <= delta_t_val <= 8: color = '#28A745' # Verde
-                        elif 8 < delta_t_val <= 10: color = '#FFC107' # Amarelo
-                        
-                        ax.plot([x1, x2], [y1, y2], color=color, linestyle='-', linewidth=2, marker='o', markersize=3)
+                    min_y_val = df_chart['delta_t_c'].min() - 2 if not df_chart.empty else -2
+                    max_y_val = df_chart['delta_t_c'].max() + 2 if not df_chart.empty else 15
+                    ax.set_ylim(min_y_val, max_y_val)
 
-                    ax.set_title('Tendência do Delta T (°C)')
+                    ax.axhspan(10, max_y_val, facecolor=COLOR_INADEQUADA, alpha=0.5, zorder=0, label='_nolegend_')
+                    ax.axhspan(8, 10, facecolor=COLOR_ARRISCADA, alpha=0.5, zorder=0, label='_nolegend_')
+                    ax.axhspan(2, 8, facecolor=COLOR_ADEQUADA, alpha=0.5, zorder=0, label='_nolegend_')
+                    ax.axhspan(min_y_val, 2, facecolor=COLOR_ARRISCADA, alpha=0.5, zorder=0, label='_nolegend_')
+
+                    for i in range(len(df_chart)):
+                        y_val = df_chart['delta_t_c'].iloc[i]
+                        x_val = df_chart.index[i]
+                        
+                        color_segmento = 'grey'
+                        if y_val < 2: color_segmento = COLOR_ARRISCADA
+                        elif y_val > 10: color_segmento = COLOR_INADEQUADA
+                        elif 2 <= y_val <= 8: color_segmento = COLOR_ADEQUADA
+                        elif 8 < y_val <= 10: color_segmento = COLOR_ARRISCADA
+                        
+                        if i < len(df_chart) - 1:
+                            y_next = df_chart['delta_t_c'].iloc[i+1]
+                            x_next = df_chart.index[i+1]
+                            ax.plot([x_val, x_next], [y_val, y_next], color=color_segmento, linestyle='-', linewidth=2.5, zorder=1)
+
+                        if icone_alvo_para_matplotlib:
+                            oi = OffsetImage(icone_alvo_para_matplotlib, zoom=0.2) # Ícone menor
+                            ab = AnnotationBbox(oi, (mdates.date2num(x_val), y_val), frameon=False, xycoords='data', pad=0, zorder=2)
+                            ax.add_artist(ab)
+                        else:
+                            ax.plot(x_val, y_val, marker='o', color=color_segmento, markersize=5, zorder=2, markeredgecolor='black')
+
+
+                    ax.set_title('Tendência do Delta T (°C) com Ícones e Zonas de Risco')
                     ax.set_xlabel('Data/Hora')
                     ax.set_ylabel('Delta T (°C)')
-                    ax.grid(True, linestyle=':', alpha=0.7)
-                    fig.autofmt_xdate() # Formatação automática das datas no eixo X
+                    ax.grid(True, linestyle=':', alpha=0.6, zorder=0.5)
+                    fig.autofmt_xdate()
                     ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m %H:%M'))
 
-                    # Adicionar linhas horizontais para limites críticos de Delta T
-                    ax.axhline(2, color='orange', linestyle='--', linewidth=1, label='Limite Inferior Arriscado (2°C)')
-                    ax.axhline(8, color='blue', linestyle='--', linewidth=1, label='Limite Superior Adequado (8°C)')
-                    ax.axhline(10, color='darkorange', linestyle='--', linewidth=1, label='Limite Superior Arriscado (10°C)')
+                    ax.axhline(2, color='black', linestyle='--', linewidth=1, label='_nolegend_', zorder=1.5)
+                    ax.axhline(8, color='black', linestyle='--', linewidth=1, label='_nolegend_', zorder=1.5)
+                    ax.axhline(10, color='black', linestyle='--', linewidth=1, label='_nolegend_', zorder=1.5)
                     
-                    # Criar legenda personalizada para as cores (se necessário, ou usar a legenda das linhas de limite)
                     handles = [
-                        plt.Line2D([0], [0], color='#28A745', lw=2, label='Adequada (2-8°C)'),
-                        plt.Line2D([0], [0], color='#FFC107', lw=2, label='Arriscada (<2°C ou 8-10°C)'),
-                        plt.Line2D([0], [0], color='#DC3545', lw=2, label='Inadequada (>10°C)')
+                        plt.Rectangle((0,0),1,1, color=COLOR_ADEQUADA, alpha=0.5),
+                        plt.Rectangle((0,0),1,1, color=COLOR_ARRISCADA, alpha=0.5),
+                        plt.Rectangle((0,0),1,1, color=COLOR_INADEQUADA, alpha=0.5),
+                        plt.Line2D([0], [0], color='black', linestyle='--', linewidth=1)
                     ]
-                    ax.legend(handles=handles, loc='upper left', fontsize='small')
+                    labels = ['Zona Adequada (2-8°C)', 'Zona Arriscada (<2°C ou 8-10°C)', 'Zona Inadequada (>10°C)', 'Limites Delta T']
+                    ax.legend(handles=handles, labels=labels, loc='upper left', fontsize='small', framealpha=0.7)
 
                     st.pyplot(fig)
                 else:
@@ -477,7 +472,11 @@ st.markdown("""
 **Notas:**
 - O gráfico principal agora mostra os últimos """ + str(MAX_PONTOS_GRAFICO_PRINCIPAL) + """ pontos históricos com linhas de conexão.
 - O histórico em tabela foca nos dados de Delta T.
-- O gráfico de tendência do Delta T possui cores condicionais por segmento.
+- O gráfico de tendência do Delta T possui:
+    - Ícones "alvo" (menores) em cada ponto.
+    - Segmentos de linha coloridos conforme a condição.
+    - Fundo com regiões coloridas (50% de opacidade) indicando as zonas de risco.
+    - Paleta de cores padronizada.
 - **Para uso real, substitua a função `buscar_dados_ecowitt_simulado()` pela sua integração com a API da sua estação Ecowitt.**
 - O histórico é armazenado (simulado) e exibido. Para persistência real, integre com um banco de dados.
 """)
