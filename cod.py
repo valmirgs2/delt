@@ -298,7 +298,7 @@ with col_dados_estacao:
         if condicao_atual_texto == "INADEQUADA": cor_fundo_condicao = "#FFA500"; cor_texto_condicao = "#FFFFFF" # Light Red
         elif condicao_atual_texto == "ARRISCADA": cor_fundo_condicao = "#FF0000"; cor_texto_condicao = "#FFFFFF" # Light Yellow/Orange
         elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#00EE00"; cor_texto_condicao = "#FFFFFF" # Light Green
-        elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#FFFFFF" # Light Orange
+        elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "##FFA500"; cor_texto_condicao = "#FFFFFF" # Light Orange
         elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#FFFFFF" # Light Pink/Red
 
 
@@ -329,17 +329,17 @@ with col_dados_estacao:
         cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
 
         if vento_velocidade_atual <= 3: # km/h
-            condicao_vento_texto = "ARRISCADO"
+            condicao_vento_texto = "INADEQUADO"
             desc_condicao_vento = "Risco de inversão térmica (vento muito fraco)."
-            cor_fundo_vento = "#FFA500"; cor_texto_vento = "#A76800" # Light Orange
+            cor_fundo_vento = "#FFA500"; cor_texto_vento = "#FFFFFF" # Light Orange
         elif 3 < vento_velocidade_atual <= 10: # Adjusted upper limit slightly based on common recs (e.g. 10-12 km/h)
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#00EE00"; cor_texto_vento = "#155724" # Light Green
+            cor_fundo_vento = "#00EE00"; cor_texto_vento = "#FFFFFF" # Light Green
         else: # > 10 km/h
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva (vento forte)."
-            cor_fundo_vento = "#FF0000"; cor_texto_vento = "#D8000C" # Light Red
+            cor_fundo_vento = "#FF0000"; cor_texto_vento = "#FFFFFF" # Light Red
 
         with col_vento1:
             st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
