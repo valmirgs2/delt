@@ -151,10 +151,16 @@ def buscar_dados_ecowitt_simulado():
     umid = round(random.uniform(20, 90), 1)
     temp_sup = round(temp_inf + random.uniform(-1.0, 2.0), 1)
     temp_sup = max(0, min(temp_sup, 50)) # Clip to 0-50 for calculations
+    
+    # Simulate wind_speed_kmh first to use it for wind_gust_kmh
+    wind_speed_kmh_val = round(random.uniform(0, 25), 1)
+    wind_gust_kmh_val = round(wind_speed_kmh_val + random.uniform(1, 10), 1)
+
+
     return {
         "temperature_c": temp_inf, "humidity_percent": umid, "temperature_superior_c": temp_sup,
-        "wind_speed_kmh": round(random.uniform(0, 25), 1),
-        "wind_gust_kmh": round(random.uniform(1, 10) + dados.get("wind_speed_kmh",0), 1) if 'dados' in locals() and dados.get("wind_speed_kmh") is not None else round(random.uniform(1,30),1),
+        "wind_speed_kmh": wind_speed_kmh_val,
+        "wind_gust_kmh": wind_gust_kmh_val,
         "pressure_hpa": round(random.uniform(990, 1025), 1),
         "wind_direction": random.choice(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
         "altitude_m": 314, "uv_index": random.randint(0, 11),
@@ -225,8 +231,9 @@ if dados: # Check if dados is not None and not empty
     dt_cond = dados.get('condition_text', '-')
     dt_desc = dados.get('condition_description', 'Aguardando...')
     dt_color_map = {"INADEQUADA": "#FFA500", "ARRISCADA": "#FF0000", "ADEQUADA": "#00CC66", "ATENÇÃO": "#FFA500"}
-    dt_bg = dt_color_map.get(dt_cond, "#F8D7DA" if "ERRO" in dt_cond.upper() else "lightgray")
-    dt_txt = "#FFFFFF" if dt_cond in dt_color_map else ("#721C24" if "ERRO" in dt_cond.upper() else "black")
+    dt_bg = dt_color_map.get(dt_cond, "#F8D7DA" if "ERRO" in str(dt_cond).upper() else "lightgray") # Added str() for dt_cond robustness
+    dt_txt = "#FFFFFF" if dt_cond in dt_color_map else ("#721C24" if "ERRO" in str(dt_cond).upper() else "black")
+
 
     st.markdown(f"<div style='text-align:center; margin-bottom:10px;'><span style='font-size:1.1em; font-weight:bold;'>Delta T (Base Temp. Sup.):</span><br><span style='font-size:2.2em; font-weight:bold; color:#007bff;'>{dt_val:.2f}°C</span></div>" if dt_val is not None else "<div style='text-align:center; margin-bottom:10px;'><span style='font-size:1.1em; font-weight:bold;'>Delta T:</span><br><span style='font-size:2.2em; font-weight:bold; color:gray;'>-</span></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='background-color:{dt_bg}; color:{dt_txt}; padding:10px; border-radius:5px; text-align:center; margin-bottom:5px;'><strong style='font-size:1.1em;'>Condição Delta T: {dt_cond}</strong></div><p style='text-align:center; font-size:0.85em; color:#555;'>{dt_desc}</p>", unsafe_allow_html=True)
@@ -289,9 +296,16 @@ if historico_bruto:
     df_historico = pd.DataFrame(historico_bruto)
     if not df_historico.empty and 'timestamp' in df_historico.columns:
         try:
-            df_historico['timestamp_dt'] = pd.to_datetime(df_historico['timestamp'], errors='coerce').dt.tz_localize(None).dt.tz_localize(app_timezone, ambiguous='infer')
+            # Ensure 'timestamp' is string before conversion, handle potential errors during conversion
+            df_historico['timestamp_dt'] = pd.to_datetime(df_historico['timestamp'].astype(str), errors='coerce')
             df_historico.dropna(subset=['timestamp_dt'], inplace=True) # Remove rows where timestamp conversion failed
+            # Localize to UTC first if no tz, then convert to app_timezone
+            if df_historico['timestamp_dt'].dt.tz is None:
+                df_historico['timestamp_dt'] = df_historico['timestamp_dt'].dt.tz_localize('UTC').dt.tz_convert(app_timezone)
+            else:
+                df_historico['timestamp_dt'] = df_historico['timestamp_dt'].dt.tz_convert(app_timezone)
             df_historico = df_historico.sort_values(by='timestamp_dt', ascending=False)
+
 
             st.markdown("##### Últimos Registros")
             cols_hist = ['timestamp_dt', 'temperature_c', 'temperature_superior_c', 'humidity_percent', 'delta_t_c', 'condition_text', 'wind_speed_kmh']
@@ -312,60 +326,62 @@ if historico_bruto:
             df_chart_filt = pd.DataFrame(); now_filt = datetime.now(app_timezone)
 
             if sel_int_label == "Custom":
-                date_picker_cols = st.columns(2) # Guarded unpacking
-                if len(date_picker_cols) == 2:
+                date_picker_cols = st.columns(2) 
+                if len(date_picker_cols) == 2: # Guard against st.columns not returning 2 items
                     c_start, c_end = date_picker_cols
-                    min_hist_dt = df_chart_full.index.min().date() if not df_chart_full.empty and pd.notna(df_chart_full.index.min()) else (now_filt - timedelta(days=7)).date()
                     
-                    # Retrieve from session state if exists, otherwise use default
-                    start_val = st.session_state.get('d_start_pick_val', min_hist_dt)
+                    min_hist_dt_val = (now_filt - timedelta(days=7)).date() # Default
+                    if not df_chart_full.empty and pd.notna(df_chart_full.index.min()):
+                         min_hist_dt_val = df_chart_full.index.min().date()
+                    
+                    start_val = st.session_state.get('d_start_pick_val', min_hist_dt_val)
                     end_val = st.session_state.get('d_end_pick_val', now_filt.date())
 
                     d_start = c_start.date_input("Início", value=start_val, min_value=(now_filt - timedelta(days=730)).date(), max_value=now_filt.date(), key="d_start_pick_ui")
-                    if d_start: st.session_state.d_start_pick_val = d_start # Save to session state
+                    if d_start: st.session_state.d_start_pick_val = d_start
                     
-                    # Ensure end_val is not before d_start
                     if d_start and end_val < d_start: end_val = d_start
                     
                     d_end = c_end.date_input("Fim", value=end_val, min_value=d_start if d_start else (now_filt - timedelta(days=730)).date(), max_value=now_filt.date(), key="d_end_pick_ui")
-                    if d_end: st.session_state.d_end_pick_val = d_end # Save to session state
+                    if d_end: st.session_state.d_end_pick_val = d_end
 
                     if d_start and d_end:
                         s_dt = app_timezone.localize(datetime.combine(d_start, time.min)); e_dt = app_timezone.localize(datetime.combine(d_end, time.max))
                         df_chart_filt = df_chart_full[(df_chart_full.index >= s_dt) & (df_chart_full.index <= e_dt)]
+                    else:
+                        df_chart_filt = pd.DataFrame() # Ensure it's empty if dates are not valid
                 else:
-                    st.error("Falha interna: colunas para datas."); df_chart_filt = pd.DataFrame()
+                    st.error("Falha interna: não foi possível criar colunas para seleção de data."); df_chart_filt = pd.DataFrame()
             else:
                 horas = opts_int.get(sel_int_label)
                 if horas is not None: df_chart_filt = df_chart_full[df_chart_full.index >= (now_filt - timedelta(hours=horas))]
-                else: df_chart_filt = df_chart_full
+                else: df_chart_filt = df_chart_full # "Tudo"
             
             if not df_chart_filt.empty:
                 df_alt = df_chart_filt.reset_index()
                 common_x = alt.X('timestamp_dt:T', title='Data/Hora', axis=alt.Axis(format='%d/%m %Hh'))
-                
                 tooltip_ts = alt.Tooltip('timestamp_dt:T', title='Data/Hora', format='%d/%m %H:%M')
 
-                delta_t_c = alt.Chart(df_alt.dropna(subset=['delta_t_c'])).mark_line(point=alt.OverlayMarkDef(size=20), interpolate='monotone').encode(
+                delta_t_c_chart = alt.Chart(df_alt.dropna(subset=['delta_t_c'])).mark_line(point=alt.OverlayMarkDef(size=20), interpolate='monotone').encode(
                     x=common_x, y=alt.Y('delta_t_c:Q', title='ΔT (°C)'),
                     color=alt.condition(alt.LogicalOrPredicate(predicates=[alt.LogicalAndPredicate(predicates=[alt.datum.delta_t_c>=0,alt.datum.delta_t_c<2]), alt.LogicalAndPredicate(predicates=[alt.datum.delta_t_c>8,alt.datum.delta_t_c<=10])]), alt.value('orange'),
                                       alt.condition(alt.LogicalAndPredicate(predicates=[alt.datum.delta_t_c>=2,alt.datum.delta_t_c<=8]), alt.value('#00CC66'),
                                                     alt.condition(alt.datum.delta_t_c>10,alt.value('red'),alt.value('lightgray')))),
                     tooltip=[tooltip_ts, alt.Tooltip('delta_t_c:Q',title='ΔT(°C)',format='.2f'), alt.Tooltip('condition_text:N',title='Cond.ΔT')]
                 ).properties(title='Tendência Delta T (base T.Superior)').interactive()
-                st.altair_chart(delta_t_c, use_container_width=True)
+                st.altair_chart(delta_t_c_chart, use_container_width=True)
 
-                for col, title, color_chart in [('temperature_c','T.Inf.(°C)','royalblue'),('temperature_superior_c','T.Sup.(°C)','orangered'), ('humidity_percent','UR(%)','forestgreen'),('wind_speed_kmh','Vento(km/h)','slategray')]:
+                for col, title_chart, color_c in [('temperature_c','T.Inf.(°C)','royalblue'),('temperature_superior_c','T.Sup.(°C)','orangered'), ('humidity_percent','UR(%)','forestgreen'),('wind_speed_kmh','Vento(km/h)','slategray')]:
                     if col in df_alt.columns:
-                        chart = alt.Chart(df_alt.dropna(subset=[col])).mark_line(point=True, color=color_chart).encode(
-                            x=common_x, y=alt.Y(f'{col}:Q', title=title), tooltip=[tooltip_ts, alt.Tooltip(f'{col}:Q', title=title, format='.1f')]
-                        ).properties(title=f'Tendência {title}').interactive()
+                        chart = alt.Chart(df_alt.dropna(subset=[col])).mark_line(point=True, color=color_c).encode(
+                            x=common_x, y=alt.Y(f'{col}:Q', title=title_chart), tooltip=[tooltip_ts, alt.Tooltip(f'{col}:Q', title=title_chart, format='.1f')]
+                        ).properties(title=f'Tendência {title_chart}').interactive()
                         st.altair_chart(chart, use_container_width=True)
             else: st.info("Sem dados históricos para o intervalo selecionado.")
         except Exception as e_pd:
             st.error(f"Erro ao formatar histórico ou gerar gráficos: {e_pd}")
             import traceback
-            print(f"Pandas/Altair Error: {e_pd}\n{traceback.format_exc()}") # Log full error and traceback
+            print(f"Pandas/Altair Error: {e_pd}\n{traceback.format_exc()}")
 else: st.info("Nenhum histórico de dados encontrado.")
 
 st.markdown("---")
@@ -375,4 +391,4 @@ st.markdown("""
 - **Inversão Térmica:** Avaliada comparando T. Inferior, T. Superior e Vento.
 - **Horários:** Exibidos no fuso horário local da aplicação (`America/Sao_Paulo`).
 - **Simulação:** Para uso real, integre com sua API Ecowitt e um banco de dados.
-""")
+""") # Corrected: Removed ', F'
