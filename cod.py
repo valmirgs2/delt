@@ -6,6 +6,7 @@ from io import BytesIO
 from datetime import datetime, timedelta
 import time
 import random # Para simular dados da Ecowitt
+import pandas as pd # Adicionado para o histórico
 
 # --- Simulação do Firestore (substitua pela integração real) ---
 if 'db_historico' not in st.session_state:
@@ -37,13 +38,13 @@ def calcular_temperatura_bulbo_umido_stull(t_bs, rh):
 
 def calcular_delta_t_e_condicao(t_bs, rh):
     if not (0 <= rh <= 100):
-        return None, None, "Erro: Umidade Relativa fora da faixa (0-100%).", None, None, None, None
-    if not (0 <= t_bs <= 50): 
-        return None, None, f"Erro: Temperatura do Ar ({t_bs}°C) fora da faixa de cálculo (0-50°C).", None, None, None, None
+        return None, None, "Erro: Umidade Relativa fora da faixa (0-100%).", None, None, None
+    if not (0 <= t_bs <= 50):
+        return None, None, f"Erro: Temperatura do Ar ({t_bs}°C) fora da faixa de cálculo (0-50°C).", None, None, None
     try:
         t_w = calcular_temperatura_bulbo_umido_stull(t_bs, rh)
         delta_t = t_bs - t_w
-        
+
         ponto_orvalho = t_bs - ((100 - rh) / 5.0)
         sensacao_termica = t_bs + 0.3 * (rh/100 * 6.105 * math.exp(17.27 * t_bs / (237.7 + t_bs)) - 10)
         if rh < 50 and t_bs > 25 : sensacao_termica = t_bs + (t_bs-25)/5
@@ -60,36 +61,36 @@ def calcular_delta_t_e_condicao(t_bs, rh):
         elif 2 <= delta_t <= 8:
             condicao_texto = "ADEQUADA"
             descricao_condicao = "Condições ideais para pulverização."
-        else:
+        else: # 8 < delta_t <= 10
             condicao_texto = "ATENÇÃO"
             descricao_condicao = f"Condição limite (Delta T {delta_t:.1f}°C)."
-        
+
         return t_w, delta_t, condicao_texto, descricao_condicao, ponto_orvalho, sensacao_termica
     except Exception as e:
-        return None, None, f"Erro no cálculo: {e}", None, None, None, None
+        return None, None, f"Erro no cálculo: {e}", None, None, None
 
 
 # --- FUNÇÃO PARA DESENHAR PONTO E ÍCONE NO GRÁFICO (COM COORDENADAS PRECISAS) ---
 def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_icone):
     print(f"DEBUG GRÁFICO: Iniciando desenhar_grafico_com_ponto. temp_usuario={temp_usuario}, rh_usuario={rh_usuario}")
-    if imagem_base_pil is None: 
+    if imagem_base_pil is None:
         print("DEBUG GRÁFICO: Imagem base é None, retornando None.")
-        return None 
-    
+        return None
+
     print(f"DEBUG GRÁFICO: Dimensões da imagem base: {imagem_base_pil.size}")
-    img_processada = imagem_base_pil.copy() 
+    img_processada = imagem_base_pil.copy()
     draw = ImageDraw.Draw(img_processada)
 
     # --- COORDENADAS E LIMITES DOS EIXOS ATUALIZADOS CONFORME ESPECIFICADO PELO USUÁRIO ---
-    temp_min_grafico = 0.0   # Temperatura mínima no eixo X
-    temp_max_grafico = 50.0  # Temperatura máxima no eixo X
-    pixel_x_min_temp = 443   # Pixel X para 0°C
-    pixel_x_max_temp = 1965  # Pixel X para 50°C
+    temp_min_grafico = 0.0    # Temperatura mínima no eixo X
+    temp_max_grafico = 50.0   # Temperatura máxima no eixo X
+    pixel_x_min_temp = 198    # Pixel X para 0°C
+    pixel_x_max_temp = 880    # Pixel X para 50°C
 
-    rh_min_grafico = 10.0    # Umidade Relativa mínima no eixo Y
-    rh_max_grafico = 100.0   # Umidade Relativa máxima no eixo Y
-    pixel_y_min_rh = 1450    # Pixel Y para 10% UR (base do gráfico)
-    pixel_y_max_rh = 242     # Pixel Y para 100% UR (topo do gráfico)
+    rh_min_grafico = 10.0     # Umidade Relativa mínima no eixo Y
+    rh_max_grafico = 100.0    # Umidade Relativa máxima no eixo Y
+    pixel_y_min_rh = 650      # Pixel Y para 10% UR (base do gráfico, pixel mais alto para valor mais baixo)
+    pixel_y_max_rh = 108      # Pixel Y para 100% UR (topo do gráfico, pixel mais baixo para valor mais alto)
 
     if temp_usuario is not None and rh_usuario is not None:
         plotar_temp = max(temp_min_grafico, min(temp_usuario, temp_max_grafico))
@@ -101,69 +102,71 @@ def desenhar_grafico_com_ponto(imagem_base_pil, temp_usuario, rh_usuario, url_ic
 
         range_rh_grafico = rh_max_grafico - rh_min_grafico
         percent_rh = (plotar_rh - rh_min_grafico) / range_rh_grafico if range_rh_grafico != 0 else 0
-        pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh)) 
-        
+        # A lógica de cálculo para Y inverte a direção porque os pixels aumentam de cima para baixo
+        # pixel_y_min_rh (650 para 10%) é "mais abaixo" na imagem que pixel_y_max_rh (108 para 100%)
+        pixel_y_usuario = int(pixel_y_min_rh - percent_rh * (pixel_y_min_rh - pixel_y_max_rh))
+
         print(f"DEBUG GRÁFICO: Coordenadas calculadas para o ponto: X={pixel_x_usuario}, Y={pixel_y_usuario}")
 
         # Desenhar o ponto vermelho
-        raio_ponto = 8 
+        raio_ponto = 8
         cor_ponto = "red"
         print(f"DEBUG GRÁFICO: A desenhar ponto vermelho em ({pixel_x_usuario}, {pixel_y_usuario}) com raio {raio_ponto}")
         draw.ellipse([(pixel_x_usuario - raio_ponto, pixel_y_usuario - raio_ponto),
                       (pixel_x_usuario + raio_ponto, pixel_y_usuario + raio_ponto)],
-                     fill=cor_ponto, outline="black", width=1) 
+                     fill=cor_ponto, outline="black", width=1)
         print("DEBUG GRÁFICO: Ponto vermelho desenhado.")
-        
+
         try:
             print(f"DEBUG ÍCONE: A tentar descarregar ícone de: {url_icone}")
-            response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}) 
+            response_icone = requests.get(url_icone, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
             print(f"DEBUG ÍCONE: Status da resposta do ícone: {response_icone.status_code}")
-            response_icone.raise_for_status() 
-            
+            response_icone.raise_for_status()
+
             content_type_icone = response_icone.headers.get('content-type', '').lower()
             print(f"DEBUG ÍCONE: Ícone descarregado, content-type: {content_type_icone}")
 
             if not (content_type_icone.startswith('image/png') or \
                     content_type_icone.startswith('image/jpeg') or \
                     content_type_icone.startswith('image/gif') or \
-                    content_type_icone.startswith('image/webp')): 
+                    content_type_icone.startswith('image/webp')):
                 st.warning(f"O URL do ícone não parece ser uma imagem direta (Content-Type: {content_type_icone}). Por favor, verifique o URL do ícone.")
                 print(f"DEBUG ÍCONE: Content-Type não é de imagem reconhecida: {content_type_icone}. URL: {url_icone}")
-                return img_processada 
+                return img_processada
 
             icone_img_original = Image.open(BytesIO(response_icone.content)).convert("RGBA")
             print("DEBUG ÍCONE: Ícone aberto com Pillow.")
-            
-            tamanho_icone_base = 35 
-            novo_tamanho_icone = int(tamanho_icone_base * 1.25) 
-            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone) 
-            
+
+            tamanho_icone_base = 35
+            novo_tamanho_icone = int(tamanho_icone_base * 1.25)
+            tamanho_icone = (novo_tamanho_icone, novo_tamanho_icone)
+
             icone_redimensionado = icone_img_original.resize(tamanho_icone, Image.Resampling.LANCZOS)
             print(f"DEBUG ÍCONE: Ícone redimensionado para {tamanho_icone}.")
-            
+
             # Centralizar o ícone sobre o ponto
             pos_x_icone = pixel_x_usuario - tamanho_icone[0] // 2
-            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2 
+            pos_y_icone = pixel_y_usuario - tamanho_icone[1] // 2
             print(f"DEBUG ÍCONE: Calculada posição do ícone: ({pos_x_icone}, {pos_y_icone}) para pixel_usuario ({pixel_x_usuario},{pixel_y_usuario})")
-            
+
             img_processada.paste(icone_redimensionado, (pos_x_icone, pos_y_icone), icone_redimensionado)
             print("DEBUG ÍCONE: Ícone colado na imagem.")
 
-        except requests.exceptions.HTTPError as e_http: 
+        except requests.exceptions.HTTPError as e_http:
             print(f"DEBUG ÍCONE: Erro HTTP ao descarregar ícone: {e_http}")
             st.warning(f"Não foi possível descarregar o ícone de marcação (Erro HTTP {response_icone.status_code}). Verifique se o URL está correto e acessível: {url_icone}")
-        except requests.exceptions.RequestException as e_req: 
+        except requests.exceptions.RequestException as e_req:
             print(f"DEBUG ÍCONE: Erro de rede ao descarregar ícone: {e_req}")
             st.warning(f"Não foi possível descarregar o ícone de marcação (erro de rede). Verifique sua conexão e o URL do ícone.")
-        except IOError as e_io: 
+        except IOError as e_io:
             print(f"DEBUG ÍCONE: Erro do Pillow ao abrir/processar o ícone (IOError): {e_io}")
             st.warning(f"O ficheiro do ícone pode estar corrompido ou não é um formato de imagem suportado. Verifique o URL do ícone.")
-        except Exception as e_icon: 
+        except Exception as e_icon:
             print(f"DEBUG ÍCONE: Erro geral e inesperado ao processar ícone: {e_icon}")
             st.warning(f"Ocorreu um erro inesperado ao carregar ou processar o ícone de marcação.")
     else:
         print("DEBUG GRÁFICO: temp_usuario ou rh_usuario é None, nenhum ponto/ícone será desenhado.")
-            
+
     print("DEBUG GRÁFICO: Retornando img_processada de desenhar_grafico_com_ponto.")
     return img_processada
 
@@ -176,7 +179,7 @@ if 'dados_atuais' not in st.session_state: st.session_state.dados_atuais = None
 if 'imagem_grafico_atual' not in st.session_state: st.session_state.imagem_grafico_atual = None
 
 url_grafico_base = "https://i.postimg.cc/zXZpjrnd/Screenshot-20250520-192948-Drive.jpg"
-url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png" 
+url_icone_localizacao = "https://estudioweb.com.br/wp-content/uploads/2023/02/Emoji-Alvo-png.png"
 INTERVALO_ATUALIZACAO_MINUTOS = 5
 
 @st.cache_data(ttl=3600)
@@ -199,8 +202,8 @@ if imagem_base_pil is None:
 
 def buscar_dados_ecowitt_simulado():
     time.sleep(0.5)
-    temp = round(random.uniform(0, 50), 1)    
-    umid = round(random.uniform(10, 100), 1) 
+    temp = round(random.uniform(0, 50), 1)
+    umid = round(random.uniform(10, 100), 1)
     vento_vel = round(random.uniform(0, 20), 1)
     vento_raj = round(vento_vel + random.uniform(0, 15), 1)
     pressao = round(random.uniform(1000, 1025), 1)
@@ -225,7 +228,7 @@ def atualizar_dados_estacao():
         temp_ar = dados_ecowitt["temperature_c"]
         umid_rel = dados_ecowitt["humidity_percent"]
         t_w, delta_t, condicao, desc_condicao, ponto_orvalho, sensacao_termica = calcular_delta_t_e_condicao(temp_ar, umid_rel)
-        
+
         if t_w is not None and delta_t is not None:
             print("DEBUG APP: Cálculo de Delta T bem-sucedido.")
             dados_para_salvar = {
@@ -242,7 +245,7 @@ def atualizar_dados_estacao():
             if imagem_base_pil:
                 print("DEBUG APP: Imagem base PIL existe, chamando desenhar_grafico_com_ponto.")
                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
-                    imagem_base_pil, 
+                    imagem_base_pil,
                     temp_ar, umid_rel, url_icone_localizacao
                 )
                 if st.session_state.imagem_grafico_atual:
@@ -253,8 +256,8 @@ def atualizar_dados_estacao():
                 print("DEBUG APP: Imagem base PIL é None, não pode desenhar no gráfico.")
             st.session_state.last_update_time = datetime.now()
             return True
-        else: 
-            st.error(f"Erro no cálculo Delta T: {condicao}") 
+        else:
+            st.error(f"Erro no cálculo Delta T: {condicao}") # 'condicao' aqui será a mensagem de erro
             print(f"DEBUG APP: Erro no cálculo Delta T: {condicao}")
             dados_erro = {
                 "timestamp": datetime.now().isoformat(), "temperature_c": temp_ar,
@@ -262,17 +265,17 @@ def atualizar_dados_estacao():
                 "condition_text": "ERRO CÁLCULO", "condition_description": condicao, **dados_ecowitt
             }
             st.session_state.dados_atuais = dados_erro
-            if imagem_base_pil: 
-                 print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto/ícone de qualquer maneira.")
-                 st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
+            if imagem_base_pil:
+                print("DEBUG APP: Erro no cálculo, mas tentando desenhar ponto/ícone de qualquer maneira.")
+                st.session_state.imagem_grafico_atual = desenhar_grafico_com_ponto(
                     imagem_base_pil, temp_ar, umid_rel, url_icone_localizacao
                 )
-            st.session_state.last_update_time = datetime.now() 
-            return False 
+            st.session_state.last_update_time = datetime.now()
+            return False
     else:
         st.error("Não foi possível obter os dados da estação Ecowitt (simulado).")
         print("DEBUG APP: Falha ao buscar dados da Ecowitt.")
-    return False 
+    return False
 
 agora_atual = datetime.now()
 if st.session_state.last_update_time == datetime.min or \
@@ -281,10 +284,10 @@ if st.session_state.last_update_time == datetime.min or \
         st.info("Usando dados simulados. Substitua `buscar_dados_ecowitt_simulado` pela sua integração real com a API Ecowitt.")
         st.session_state.simulacao_info_mostrada = True
     if atualizar_dados_estacao():
-        if 'running_first_time' not in st.session_state: 
+        if 'running_first_time' not in st.session_state:
             print("DEBUG APP: Primeira atualização bem-sucedida, executando st.rerun()")
+            st.session_state.running_first_time = True # Marcar que a primeira execução ocorreu
             st.rerun()
-        st.session_state.running_first_time = False
     else:
         print(f"DEBUG APP: Tentativa de atualização automática às {agora_atual.strftime('%H:%M:%S')} não bem-sucedida.")
 
@@ -306,7 +309,7 @@ with col_dados_estacao:
         with col_temp2:
             st.metric(label="Umidade Relativa", value=f"{dados.get('humidity_percent', '-'):.1f} %")
             st.metric(label="Sensação Térmica", value=f"{dados.get('feels_like_c', '-'):.1f} °C" if dados.get('feels_like_c') is not None else "- °C")
-        
+
         st.markdown("##### 🌱 Delta T")
         condicao_atual_texto = dados.get('condition_text', '-')
         desc_condicao_atual = dados.get('condition_description', 'Aguardando dados...')
@@ -316,10 +319,10 @@ with col_dados_estacao:
         elif condicao_atual_texto == "ADEQUADA": cor_fundo_condicao = "#D4EDDA"; cor_texto_condicao = "#155724"
         elif condicao_atual_texto == "ATENÇÃO": cor_fundo_condicao = "#FFE9C5"; cor_texto_condicao = "#A76800"
         elif condicao_atual_texto == "ERRO CÁLCULO": cor_fundo_condicao = "#F8D7DA"; cor_texto_condicao = "#721C24"
-        
+
         delta_t_val_num = dados.get('delta_t_c', None)
         delta_t_display_val = f"{delta_t_val_num:.2f}" if delta_t_val_num is not None else "-"
-        
+
         st.markdown(f"""
         <div style='text-align: center; margin-bottom: 10px;'>
             <span style='font-size: 1.1em; font-weight: bold;'>Valor Delta T:</span><br>
@@ -338,31 +341,31 @@ with col_dados_estacao:
         st.markdown("##### 💨 Vento e Pressão")
         col_vento1, col_vento2 = st.columns(2)
         vento_velocidade_atual = dados.get('wind_speed_kmh', 0)
-        
+
         condicao_vento_texto = "-"
         desc_condicao_vento = ""
-        cor_fundo_vento = "lightgray"; cor_texto_vento = "black"
+        cor_fundo_vento = "lightgray"; cor_texto_vento = "black" # Default color
 
         if vento_velocidade_atual <= 3:
             condicao_vento_texto = "ARRISCADO"
             desc_condicao_vento = "Risco de inversão térmica."
-            cor_fundo_vento = "#FFE9C5"; cor_texto_condicao = "#A76800"
+            cor_fundo_vento = "#FFE9C5"; cor_texto_vento = "#A76800"
         elif 3 < vento_velocidade_atual <= 10:
             condicao_vento_texto = "EXCELENTE"
             desc_condicao_vento = "Condições ideais de vento."
-            cor_fundo_vento = "#D4EDDA"; cor_texto_condicao = "#155724"
-        else: 
+            cor_fundo_vento = "#D4EDDA"; cor_texto_vento = "#155724"
+        else: # > 10
             condicao_vento_texto = "MUITO PERIGOSO"
             desc_condicao_vento = "Risco de deriva."
-            cor_fundo_vento = "#FFD2D2"; cor_texto_condicao = "#D8000C"
-            
+            cor_fundo_vento = "#FFD2D2"; cor_texto_vento = "#D8000C"
+
         with col_vento1:
             st.metric(label="Vento Médio", value=f"{vento_velocidade_atual:.1f} km/h")
             st.metric(label="Pressão", value=f"{dados.get('pressure_hpa', '-'):.1f} hPa")
         with col_vento2:
             st.metric(label="Rajadas", value=f"{dados.get('wind_gust_kmh', '-'):.1f} km/h")
             st.metric(label="Direção Vento", value=f"{dados.get('wind_direction', '-')}")
-        
+
         st.markdown(f"""
         <div style='background-color: {cor_fundo_vento}; color: {cor_texto_vento}; padding: 10px; border-radius: 5px; text-align: center; margin-top: 10px; margin-bottom: 5px;'>
             <strong style='font-size: 1.1em;'>Condição do Vento: {condicao_vento_texto}</strong>
@@ -373,6 +376,7 @@ with col_dados_estacao:
 
     else:
         st.info("Aguardando dados da estação para exibir as condições atuais...")
+
     if st.button("Forçar Atualização Manual Agora", key="btn_atualizar_col1"):
         if atualizar_dados_estacao():
             st.success("Dados atualizados manualmente!")
@@ -383,7 +387,7 @@ with col_dados_estacao:
 with col_grafico_delta_t:
     st.subheader("Gráfico Delta T")
     imagem_para_exibir = st.session_state.get('imagem_grafico_atual') or imagem_base_pil
-                         
+
     if imagem_para_exibir:
         caption_text = "Gráfico de referência Delta T"
         if st.session_state.get('dados_atuais') and 'timestamp' in st.session_state.dados_atuais:
@@ -399,7 +403,6 @@ st.markdown("---")
 st.subheader("Histórico de Dados da Estação (Últimos Registros)")
 historico = carregar_historico_do_firestore_simulado()
 if historico:
-    import pandas as pd
     df_historico = pd.DataFrame(historico)
     if not df_historico.empty and 'timestamp' in df_historico.columns:
         try:
@@ -415,23 +418,32 @@ if historico:
                 'pressure_hpa': "Pressão (hPa)"}
             df_display = df_display.rename(columns=novos_nomes_colunas)
             if "Data/Hora" in df_display.columns:
-                 df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
+                df_display["Data/Hora"] = df_display["Data/Hora"].dt.strftime('%d/%m/%Y %H:%M:%S')
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         except Exception as e_pd:
             print(f"Erro ao processar DataFrame do histórico: {e_pd}")
             st.error("Erro ao formatar histórico para exibição.")
-    if not df_historico.empty and 'timestamp_dt' in df_historico.columns and len(df_historico) > 1 :
-        st.subheader("Tendências Recentes")
-        try:
-            df_chart = df_historico.set_index('timestamp_dt').sort_index()
-            colunas_numericas_chart = ['temperature_c', 'humidity_percent', 'delta_t_c', 'wind_speed_kmh']
-            colunas_presentes_chart = [col for col in colunas_numericas_chart if col in df_chart.columns]
-            if colunas_presentes_chart:
-                 st.line_chart(df_chart[colunas_presentes_chart])
-            else: st.warning("Sem dados suficientes para gráfico de tendências.")
-        except Exception as e_chart:
-            print(f"Erro ao gerar gráfico de linha do histórico: {e_chart}")
-            st.warning("Não foi possível gerar o gráfico de tendências.")
+
+        if not df_historico.empty and 'timestamp_dt' in df_historico.columns and len(df_historico) > 1 :
+            st.subheader("Tendências Recentes")
+            try:
+                df_chart = df_historico.set_index('timestamp_dt').sort_index()
+                colunas_numericas_chart = ['temperature_c', 'humidity_percent', 'delta_t_c', 'wind_speed_kmh']
+                colunas_presentes_chart = [col for col in colunas_numericas_chart if col in df_chart.columns]
+                if colunas_presentes_chart:
+                    # Renomear colunas para o gráfico para melhor visualização
+                    nomes_chart = {
+                        'temperature_c': "Temp. Ar (°C)",
+                        'humidity_percent': "Umid. Rel. (%)",
+                        'delta_t_c': "Delta T (°C)",
+                        'wind_speed_kmh': "Vento (km/h)"
+                    }
+                    df_chart_display = df_chart[colunas_presentes_chart].rename(columns=nomes_chart)
+                    st.line_chart(df_chart_display)
+                else: st.warning("Sem dados suficientes para gráfico de tendências.")
+            except Exception as e_chart:
+                print(f"Erro ao gerar gráfico de linha do histórico: {e_chart}")
+                st.warning("Não foi possível gerar o gráfico de tendências.")
 else:
     st.info("Nenhum histórico de dados encontrado.")
 
@@ -441,5 +453,5 @@ st.markdown("""
 - Este aplicativo tenta buscar dados (simulados) de uma estação Ecowitt a cada 5 minutos.
 - **Para uso real, substitua a função `buscar_dados_ecowitt_simulado()` pela sua integração com a API da sua estação Ecowitt.**
 - O histórico é armazenado (simulado) e exibido. Para persistência real, integre com um banco de dados.
-- As coordenadas de pixel para o gráfico são baseadas nas suas especificações.
+- As coordenadas de pixel para o gráfico foram atualizadas conforme suas especificações.
 """)
