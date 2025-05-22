@@ -485,9 +485,8 @@ else: st.info("Nenhum histórico de dados encontrado.")
 st.markdown("---")
 st.markdown("""
 **Notas:**
-- **Delta T:** Calculado com a **Temperatura do Sensor Superior** (Wittboy).
-- **Temperatura Inferior:** Medida pelo gateway **GW2000**.
+- **Delta T:** Calculado com a **Temperatura e Umidade do Sensor Superior** (WS90).
+- **Temperatura Inferior:** Medida pelo Gateway **GW2000**.
 - **Inversão Térmica:** Avaliada comparando T. Inferior, T. Superior e Vento.
-- **Horários:** Exibidos no fuso horário local da aplicação (`America/Sao_Paulo`).
-- **Dados Reais:** O aplicativo agora tenta buscar dados da sua estação Ecowitt via API.
+
 """)
